@@ -2,18 +2,20 @@
 
 # We definitely need these at the very least
 import os
-import discord
-from discord.ext import commands
-from dotenv import load_dotenv
+import discord                      # pyright: ignore
+from discord import app_commands    # pyright: ignore
+from dotenv import load_dotenv      # pyright: ignore
 
-# Import database functions
-from database import initialize_database, test_database, add_player_to_team
-
-#TODO: Need to add env folder
+# TODO: Need to add env folder
 
 # Load ENV variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+if not TOKEN:
+    raise RuntimeError(
+        "DISCORD_TOKEN not found. Copy .env.example -> .env and set DISCORD_TOKEN locally."
+    )
+
 
 class MyClient(discord.Client):
     user: discord.ClientUser
@@ -26,14 +28,10 @@ class MyClient(discord.Client):
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
 
-# Fallback token (for testing only)
-if not TOKEN:
-    TOKEN = "REPLACE_WITH_YOUR_TOKEN"
 
 # Set up Discord bot with message content intent enabled
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
 
 client = MyClient(intents=intents)
 
@@ -45,6 +43,7 @@ MY_GUILD = discord.Object(id=1418704334941851722)
 @client.event
 async def on_ready():
     print("We have successfully loggged in as {0.user}".format(client))
+
 
 @client.event
 async def on_message(message):
@@ -60,11 +59,6 @@ async def on_message(message):
             + "Unless you meant actual football in which case, carry on."
         )
         return
-
-@bot.event
-async def on_ready():
-    """Runs once when the bot starts up."""
-    print(f"Logged in as {bot.user}")
 
 
 # On demand stats request
@@ -138,15 +132,3 @@ async def subscriptions(interaction: discord.Interaction):
 
 
 client.run(TOKEN)
-        # Send results back to the Discord channel
-        await ctx.send(
-            f"Database test successful!\n"
-            f"Total teams: {len(result['teams'])}\n"
-            f"Teams: {', '.join(team_names)}"
-        )
-        print(result["message"])
-    else:
-        await ctx.send(result["message"])
-        print(f"Error in testdb: {result['message']}")
-
-bot.run(TOKEN)

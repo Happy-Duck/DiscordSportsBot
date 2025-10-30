@@ -1,9 +1,10 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
-from sqlalchemy import Column, Integer, String, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, UniqueConstraint
 
 # Use SQLite for local testing, the same DB the bot will connect to
 DATABASE_URL = "sqlite+aiosqlite:///./sportsbot.db"
+
 
 # Create the async engine and session factory
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)
@@ -16,6 +17,7 @@ SessionLocal = sessionmaker(
 #but be nice about it please
 Base = declarative_base()
 
+#call this function in setup_database to create sportsbot.DB 
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -25,13 +27,11 @@ class Team(Base):
     id = Column(Integer, primary_key=True)  #APIs we are pulling from presumably have each team mapped to a unique ID. 
     #If this is hard to verify, might want to change how we do this
     name = Column(String(100), nullable=False)
-    league = Column(String(100)) #100 is overkill but idk there might be leagues in this world that are overly wordy. Like me!
-    country = Column(String(50)) #League and Country being here is quite expansive; if we feel pressed for time we might just restrict
-    #ourselves to the Big 6 leagues (5 + UCL) (sorry to people who care about Real Betis B Team I guess)
+    league = Column(String(100)) 
+    country = Column(String(50)) #League and Country being here is quite expansive; could be removed.
     players = relationship("Player", back_populates="team") #One to Many
     home_matches = relationship("Match", foreign_keys='Match.home_team_id', back_populates="home_team") 
-    #home-away classification is not as important but in some leagues it makes a difference. easily editable 
-    #if we decide to do so though.
+    #home-away classification is not as important but in some leagues it makes a difference. 
     away_matches = relationship("Match", foreign_keys='Match.away_team_id', back_populates="away_team") 
     subscriptions = relationship("TeamSubscription", back_populates="team") #Discord members who follow this team
 
@@ -40,12 +40,15 @@ class Player(Base):
     id = Column(Integer, primary_key=True) #Same note as TeamID.
     name = Column(String(100), nullable=False)
     team_id = Column(Integer, ForeignKey('teams.id')) #Many to One 
-    position = Column(String(50)) #50 is a bit much lol but IDK if we'll list abbreviations or full positionings (i.e. FB vs FullBack).
+    position = Column(String(50)) 
     age = Column(Integer)
     nationality = Column(String(50))
     team = relationship("Team", back_populates="players")
     stats = relationship("PlayerStat", back_populates="player")
-    lifetime_stats = relationship("LifetimeStat", uselist=False, back_populates="player")  # One-to-One
+    lifetime_stats = relationship("LifetimeStat", uselist=False, back_populates="player", cascade="all, delete-orphan") #use-list ensures the relation is one to one i believe
+    #creates a lifetimestat object that hopefully is always pointed to by one player. bidirectional because it's more convenient to have
+    #everything point to playerstat over going to lifetime stat separately. 
+
     subscriptions = relationship("PlayerSubscription", back_populates="player")  # Discord members who follow this player
 
 class Match(Base):
@@ -71,10 +74,8 @@ class PlayerStat(Base):
     red_cards = Column(Integer, default=0)
     minutes_played = Column(Integer, default=0)
     player = relationship("Player", back_populates="stats")
-    match = relationship("Match", back_populates="stats") #yapped enough on the other ones that hopefully this object is clear. 
-    lifetime_stats = relationship("LifetimeStat", uselist=False, back_populates="player", cascade="all, delete-orphan") #use-list ensures the relation is one to one i believe
-    #creates a lifetimestat object that hopefully is always pointed to by one player. bidirectional because it's more convenient to have
-    #everything point to playerstat over going to lifetime stat separately. 
+    match = relationship("Match", back_populates="stats")
+    #removed lifetimestat object here because it would be confusing to have the many player stat objects point to one lifetime stat object
 
 
 class LifetimeStat(Base):
@@ -89,8 +90,7 @@ class LifetimeStat(Base):
     total_minutes_played = Column(Integer, default=0)
     appearances = Column(Integer, default=0)
     player = relationship("Player", back_populates="lifetime_stats")
-    #the way this object is set-up we can either handle aggregation ourselves or do API calls on this. One
-    #is faster than the other but is also a lot easier to mess up haha
+    #the way this object is set-up we can either handle aggregation ourselves or do API calls on this. 
 
 #THINGS TO CONSIDER: How are our API calls going to be handled for these objects?
 
@@ -106,7 +106,6 @@ class Member(Base):
     player_subscriptions = relationship("PlayerSubscription", back_populates="member")
     team_subscriptions = relationship("TeamSubscription", back_populates="member") #storing these separately because it gets messy
     #haha messi
-    #otherwise
 
 class PlayerSubscription(Base):
     __tablename__ = "player_subscriptions"
@@ -115,13 +114,10 @@ class PlayerSubscription(Base):
     player_id = Column(Integer, ForeignKey('players.id'))
     notify_on_goal = Column(Integer, default=1)
     notify_on_card = Column(Integer, default=1)
-    notify_on_match = Column(Integer, default=0) #things that i think are worth having the subscribe call for
-    #could extend into fouls etc (but we said we don't want to do haterisms haha)
+    notify_on_match = Column(Integer, default=0) 
     member = relationship("Member", back_populates="player_subscriptions")
     player = relationship("Player", back_populates="subscriptions")
     __table_args__ = (UniqueConstraint('member_id', 'player_id', name='_member_player_uc'),) #no duplicate subs 
-    #also idk if naming convention is _name for the name field here or if you have to do that but 
-    #every example i've found does it like this. so i guess we'll be a goody two shoes about it. 
 
 
 class TeamSubscription(Base):

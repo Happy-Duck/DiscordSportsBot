@@ -2,18 +2,16 @@
 
 # We definitely need these at the very least
 import os
-import discord                      # pyright: ignore
-from discord import app_commands    # pyright: ignore
-from dotenv import load_dotenv      # pyright: ignore
-
-# TODO: Need to add env folder
+import discord  # pyright: ignore
+from discord import app_commands  # pyright: ignore
+from dotenv import load_dotenv  # pyright: ignore
 
 # Load ENV variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
     raise RuntimeError(
-        "DISCORD_TOKEN not found. Copy .env.example -> .env and set DISCORD_TOKEN locally."
+        "DISCORD_TOKEN not found. Go to .env and set DISCORD_TOKEN locally."
     )
 
 

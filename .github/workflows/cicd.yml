@@ -1,0 +1,76 @@
+# The yml file specifies the set of actions github will listen to and perform.
+# Whenever pushing/pulling, github action will use the token(added to secret in github) to build VM and test/lint/format the codes inside docker.
+# I am not going to add pre-commit because it's only 4 people and i don't think anyone likes yelling during development
+
+
+name: Python CI/CD 
+
+# runs when you push to any feature branch or PR is made to main
+on:
+  push:
+  pull_request: 
+    branches:
+      - main
+
+jobs:
+  linter-formatter:
+    name: Lint and Format
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.11'
+
+        # flake8==6.1.0/ black==23.7.0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8==6.1.0 black==23.7.0
+      
+      # Used 100 lines
+      - name: Run black to autoformat
+        run: |
+          python -m black src/ tests/ --line-length=100
+        
+      # - name: Run flake8
+      #   run: |
+      #     python -m flake8 src/ tests/ --max-line-length=200
+      
+
+    
+
+  
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: linter-formatter
+    
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Create .env file
+        run: |
+          touch .env
+          echo "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}" >> .env
+          echo "API_FOOTBALL_KEY=${{ secrets.API_FOOTBALL_KEY }}" >> .env
+      
+      # This step is prob overkill tbh.
+      - name: Set up docker
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker Image/Run Container
+        run: docker compose build
+      
+      - name: Run tests
+        run: docker compose run --rm server pytest tests/
+      
+      - name: Shut down docker
+        run: docker compose down

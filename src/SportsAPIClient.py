@@ -65,7 +65,7 @@ class SportsAPIClient:
             print(team_list[0])
 
             for potential_team in team_list:
-                team_info.append(DataClass.Player().from_api_json(potential_team))
+                team_info.append(DataClass.Team().from_api_json(potential_team))
 
         return team_info
 

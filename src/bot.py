@@ -54,8 +54,10 @@ async def on_message(message):
 
     if "football" in message.content.lower():
         await message.channel.send(
-            "Erm, actually it's called soccer! "
-            + "Unless you meant actual football in which case, carry on."
+            (
+                "Erm, actually it's called soccer! "
+                "Unless you meant actual football in which case, carry on."
+            )
         )
         return
 
@@ -84,7 +86,6 @@ async def subscribe_player(interaction: discord.Interaction, full_name: str):
     await interaction.response.send_message(message)
 
 
-
 # subscribe team command
 @client.tree.command()
 # @app_commands.rename(full_name='team name')
@@ -96,7 +97,6 @@ async def subscribe_team(interaction: discord.Interaction, full_name: str):
         team_name=full_name
     )
     await interaction.response.send_message(message)
-
 
 
 # unsubscribe player command
@@ -128,11 +128,12 @@ async def unsubscribe_team(interaction: discord.Interaction, full_name: str):
 async def subscriptions(interaction: discord.Interaction):
     """Lists all subscribed players and teams"""
     await interaction.response.send_message(
-        "Hi "
-        + interaction.user.display_name
-        + "!\n"
-        + "Here are all of the players you are subscribed to: \n \n "
-        + "Here are all of the teams you are subscribed to: \n "
+        (
+            "Hi "
+            f"{interaction.user.display_name}!\n"
+            "Here are all of the players you are subscribed to: \n \n "
+            "Here are all of the teams you are subscribed to: \n "
+        )
     )
 
 

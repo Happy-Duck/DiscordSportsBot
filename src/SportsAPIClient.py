@@ -6,7 +6,9 @@ from . import DataClass
 import os
 from dotenv import load_dotenv
 
-# API_Football_key is required if you want to use it. Default Sports_DB_Key is 3. (I should probably be able to input keys but for now its fine for MVP)
+# API_Football_key is required if you want to use it.
+# Default Sports_DB_Key is 3.
+# Ideally, keys should be injectable, but for MVP this is fine.
 
 
 load_dotenv()
@@ -24,7 +26,7 @@ SPORTS_DB_URL = f"https://www.thesportsdb.com/api/v1/json/{SPORTS_DB_KEY}"
 # The class SportsAPIClient will be responsible for giving back the player info.
 class SportsAPIClient:
 
-    # we will only have 1 session defined per server that is passed through the class rather than creating bunch of new ones
+    # Maintain a single session per server to avoid creating many sessions
     def __init__(self, session):
         self.session = session
 

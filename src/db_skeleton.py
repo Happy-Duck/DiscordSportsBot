@@ -1,6 +1,13 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession # pyright: ignore
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship # pyright: ignore
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, UniqueConstraint # pyright: ignore
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  # pyright: ignore
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship  # pyright: ignore
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    ForeignKey,
+    Date,
+    UniqueConstraint,
+)  # pyright: ignore
 
 # Use SQLite for local testing, the same DB the bot will connect to
 DATABASE_URL = "sqlite+aiosqlite:///./sportsbot.db"
@@ -11,8 +18,8 @@ engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 # Base class for SQLAlchemy
-# SQLAlchemy is somewhat new to me so if I slip up and put a VARCHAR somewhere I shouldn't you're allowed to yell at me
-# but be nice about it please
+# SQLAlchemy is somewhat new to me. If I slip up and put a VARCHAR somewhere
+# I shouldn't, you're allowed to yell at me (but be nice about it, please).
 Base = declarative_base()
 
 
@@ -61,9 +68,9 @@ class Player(Base):
         uselist=False,
         back_populates="player",
         cascade="all, delete-orphan",
-    )  # use-list ensures the relation is one to one i believe
-    # creates a lifetimestat object that hopefully is always pointed to by one player. bidirectional because it's more convenient to have
-    # everything point to playerstat over going to lifetime stat separately.
+    )  # use-list ensures the relation is one-to-one
+    # A LifetimeStat object should be pointed to by one Player. Using a
+    # bidirectional relationship is more convenient for access patterns.
 
     subscriptions = relationship(
         "PlayerSubscription", back_populates="player"
@@ -101,7 +108,7 @@ class PlayerStat(Base):
     minutes_played = Column(Integer, default=0)
     player = relationship("Player", back_populates="stats")
     match = relationship("Match", back_populates="stats")
-    # removed lifetimestat object here because it would be confusing to have the many player stat objects point to one lifetime stat object
+    # LifetimeStat object is not referenced here to avoid many-to-one confusion
 
 
 class LifetimeStat(Base):
@@ -116,20 +123,20 @@ class LifetimeStat(Base):
     total_minutes_played = Column(Integer, default=0)
     appearances = Column(Integer, default=0)
     player = relationship("Player", back_populates="lifetime_stats")
-    # the way this object is set-up we can either handle aggregation ourselves or do API calls on this.
+    # Aggregation can be handled internally or via API calls.
 
 
-# THINGS TO CONSIDER: How are our API calls going to be handled for these objects?
+# THINGS TO CONSIDER: How will API calls be handled for these objects?
 
-### ------------------------------------------------------------ DISCORD TRACKING ------------------------------------------------------------------------------------
-# not the right amount of hyphens surely. it's fine we'll live.
+# ----------------------------- DISCORD TRACKING -----------------------------
+# The exact number of hyphens is not critical.
 
 
 class Member(Base):
     __tablename__ = "members"
     id = Column(
         Integer, primary_key=True
-    )  # our internal primary key. if we want to finagle this into being the discord_id we can do that too i think
+    )  # Internal PK. Could be mapped to discord_id if desired.
     discord_id = Column(String(50), unique=True, nullable=False)  # discord key
     username = Column(String(100))
     timezone = Column(String(50))  # transforms on the date-time for matches
@@ -162,9 +169,8 @@ class TeamSubscription(Base):
     team_id = Column(Integer, ForeignKey("teams.id"))
     notify_on_goal = Column(Integer, default=0)
     notify_on_match = Column(Integer, default=1)
-    # don't think we can track team getting carded unless we are looking at
-    # players and then mapping that to teams and then mapping that back here
-    # APIs don't seem to offer aggregate team card trackers I think. Either way, maybe a stretch feature?
+    # Tracking team cards likely requires per-player aggregation and mapping.
+    # APIs may not offer aggregate team card tracking; consider as a stretch.
     member = relationship("Member", back_populates="team_subscriptions")
     team = relationship("Team", back_populates="subscriptions")
     __table_args__ = (

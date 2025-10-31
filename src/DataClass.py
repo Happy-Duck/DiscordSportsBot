@@ -1,8 +1,7 @@
-# the code will contain bunch of dictionary that will be useful around the codes
-# to use/convert # These are the things we only need
-# better way to do this is to initalize everything to None instead and handle error?
-# but for now i think empty string will be fine for safe initialization
-from datetime import date
+# Utility data containers used across the codebase.
+# A better approach would be initializing fields to None and handling errors,
+# but for now empty strings are used for safe initialization.
+
 
 class Player:
     def __init__(

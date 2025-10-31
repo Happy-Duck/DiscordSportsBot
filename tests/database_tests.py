@@ -1,6 +1,6 @@
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine # pyright: ignore
-from sqlalchemy import text # pyright: ignore
+from sqlalchemy.ext.asyncio import create_async_engine  # pyright: ignore
+from sqlalchemy import text  # pyright: ignore
 
 # This is where we can unit test our code with absolute basic print statements; set this up for now
 # to reflect that the SportsBot:  (1) Contains the tables we require
@@ -9,8 +9,10 @@ from sqlalchemy import text # pyright: ignore
 # As we continue to work on the project, this is how
 
 DB_PATH = "sqlite+aiosqlite:////app/src/sportsbot.db"
+
+
 async def list_tables():
-    engine = create_async_engine(DB_PATH) #added absolute pathing
+    engine = create_async_engine(DB_PATH)  # added absolute pathing
     async with engine.connect() as conn:
         result = await conn.execute(
             text("SELECT name FROM sqlite_master WHERE type='table';")
@@ -43,6 +45,7 @@ async def list_table_columns():
                     print(f"  - {col}")
     await engine.dispose()
 
+
 async def show_first_five_members():
     engine = create_async_engine(DB_PATH)
     async with engine.connect() as conn:
@@ -56,6 +59,7 @@ async def show_first_five_members():
                 print(dict(row))
     await engine.dispose()
 
+
 async def show_first_five_player_subs():
     engine = create_async_engine(DB_PATH)
     async with engine.connect() as conn:
@@ -68,6 +72,7 @@ async def show_first_five_player_subs():
             for row in rows:
                 print(dict(row))
     await engine.dispose()
+
 
 async def show_first_five_team_subs():
     engine = create_async_engine(DB_PATH)

@@ -38,9 +38,9 @@ jobs:
         run: |
           python -m black src/ tests/ --line-length=100
         
-      # - name: Run flake8
-      #   run: |
-      #     python -m flake8 src/ tests/ --max-line-length=200
+      - name: Run flake8
+        run: |
+          python -m flake8 src/ tests/ --max-line-length=200
       
 
     

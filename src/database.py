@@ -1,4 +1,4 @@
-import asyncio 
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession  # pyright: ignore
 from sqlalchemy import select, delete  # pyright: ignore
 from db_skeleton import (
@@ -21,7 +21,7 @@ async def initialize_database():
 
     try:
         async with SessionLocal() as session:
-            result = await session.execute(select(1))
+            await session.execute(select(1))
             init_status["messages"].append("Database connection established.")
     except Exception as e:
         init_status["success"] = False
@@ -36,7 +36,12 @@ async def ensure_tables(*tables):
         async with engine.begin() as conn:
             # Create only the specified tables if they don't exist
             for table in tables:
-                await conn.run_sync(lambda conn: table.__table__.create(bind = conn, checkfirst=True)) #let the lambda take an argument
+                await conn.run_sync(
+                    lambda conn_arg: table.__table__.create(
+                        bind=conn_arg,
+                        checkfirst=True,
+                    )
+                )  # let the lambda take an argument
         return {
             "success": True,
             "message": f"Tables initialized: {[t.__tablename__ for t in tables]}",
@@ -112,12 +117,13 @@ async def add_player_to_team(name: str, team_name: str):
     except Exception as e:
         return {"success": False, "message": f"Failed to add player: {e}"}
 
+
 async def clear_dummy_data():
-    # Remove dummy/test records from the database. 
+    # Remove dummy/test records from the database.
     async with SessionLocal() as session:
         await session.execute(delete(Player).where(Player.name.like("Test%")))
         await session.execute(delete(Team).where(Team.name.like("Test%")))
-        await session.execute(delete(Member).where(Member.username.like("ayana%"))) 
-        # this can be edited lol i just needed the function to do this for my purposes
+        await session.execute(delete(Member).where(Member.username.like("ayana%")))
+        # this can be edited; function clears sample data used during testing
         await session.commit()
         print("Dummy data cleared.")

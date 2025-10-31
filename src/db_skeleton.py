@@ -1,6 +1,6 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, UniqueConstraint
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession # pyright: ignore
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship # pyright: ignore
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, UniqueConstraint # pyright: ignore
 
 # Use SQLite for local testing, the same DB the bot will connect to
 DATABASE_URL = "sqlite+aiosqlite:///./sportsbot.db"

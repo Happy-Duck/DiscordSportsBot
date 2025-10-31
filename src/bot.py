@@ -5,6 +5,7 @@ import os
 import discord  # pyright: ignore
 from discord import app_commands  # pyright: ignore
 from dotenv import load_dotenv  # pyright: ignore
+from db_helpers import db_subscribe_player, db_subscribe_team
 
 # Load ENV variables
 load_dotenv()
@@ -75,10 +76,13 @@ async def stats(interaction: discord.Interaction, full_name: str):
 # @app_commands.rename(full_name='full name')
 @app_commands.describe(full_name="The full name of the player you want to subscribe to")
 async def subscribe_player(interaction: discord.Interaction, full_name: str):
-    """Subscribes you to a player"""
-    await interaction.response.send_message(
-        "You have been subscribed to " + full_name + "!"
+    success, message = await db_subscribe_player(
+        discord_id=str(interaction.user.id),
+        username=interaction.user.name,
+        player_name=full_name
     )
+    await interaction.response.send_message(message)
+
 
 
 # subscribe team command
@@ -86,10 +90,13 @@ async def subscribe_player(interaction: discord.Interaction, full_name: str):
 # @app_commands.rename(full_name='team name')
 @app_commands.describe(full_name="The name of the team you want to subscribe to")
 async def subscribe_team(interaction: discord.Interaction, full_name: str):
-    """Subscribes you to a team"""
-    await interaction.response.send_message(
-        "You have been subscribed to " + full_name + "!"
+    success, message = await db_subscribe_team(
+        discord_id=str(interaction.user.id),
+        username=interaction.user.name,
+        team_name=full_name
     )
+    await interaction.response.send_message(message)
+
 
 
 # unsubscribe player command

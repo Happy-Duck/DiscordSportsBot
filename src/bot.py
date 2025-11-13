@@ -6,7 +6,7 @@ import os
 import discord  # pyright: ignore
 from discord import app_commands  # pyright: ignore
 from dotenv import load_dotenv  # pyright: ignore
-from db_helpers import db_subscribe_player, db_subscribe_team, db_member_subscriptions
+from db_helpers import db_subscribe_player, db_subscribe_team, db_subscriptions
 from db_skeleton import init_db
 
 # Load ENV variables
@@ -136,7 +136,7 @@ async def subscriptions(interaction: discord.Interaction):
     """Lists all subscribed players and teams"""
 
     discord_id = str(interaction.user.id)
-    subs = await db_member_subscriptions(discord_id)
+    subs = await db_subscriptions(discord_id)
     players = subs["players"]
     teams = subs["teams"]
 

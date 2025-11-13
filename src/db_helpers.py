@@ -86,7 +86,7 @@ async def db_subscribe_team(discord_id: str, username: str, team_name: str):
         return True, f"You have been subscribed to {team_name}!"
 
 
-async def db_member_subscriptions(discord_id: str) -> Dict[str, List[str]]:
+async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
     try:
         async with SessionLocal() as session:
             result = await session.execute(

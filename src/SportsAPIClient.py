@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import time
 import json
-import DataClass
+from src import DataClass
 import os
 from dotenv import load_dotenv
 

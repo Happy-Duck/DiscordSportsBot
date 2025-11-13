@@ -1,3 +1,5 @@
+# DataClass.py
+
 # Utility data containers used across the codebase.
 # A better approach would be initializing fields to None and handling errors,
 # but for now empty strings are used for safe initialization.
@@ -38,14 +40,16 @@ class Player:
         self.position = data.get("strPosition") or data.get("position") or self.position
 
         # nationality
-        self.nationality = data.get("strNationality") or data.get("nationality") or self.nationality
+        self.nationality = (
+            data.get("strNationality") or data.get("nationality") or self.nationality
+        )
 
         # # age (receive )
         # self.age = data.get("strNationality") or data.get("nationality") or self.age
-        
+
         # # stat
         # self.stats = data.get("strNationality") or data.get("nationality") or self.stats
-        
+
         # team info
         self.team = data.get("strTeam") or data.get("team") or self.team
         self.team_id = data.get("idTeam") or data.get("team_id") or self.team_id
@@ -83,10 +87,9 @@ class Team:
         # country
         self.country = data.get("strCountry") or self.country
         # players
-        
-        # home matches
-        
-        # away matches
-        
-        return self
 
+        # home matches
+
+        # away matches
+
+        return self

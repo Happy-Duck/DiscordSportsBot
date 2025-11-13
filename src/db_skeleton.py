@@ -1,5 +1,11 @@
+# db_skeleton.py
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  # pyright: ignore
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship  # pyright: ignore
+from sqlalchemy.orm import (
+    sessionmaker,
+    declarative_base,
+    relationship,
+)  # pyright: ignore
 from sqlalchemy import (
     Column,
     Integer,
@@ -11,7 +17,6 @@ from sqlalchemy import (
 
 # Use SQLite for local testing, the same DB the bot will connect to
 DATABASE_URL = "sqlite+aiosqlite:///./sportsbot.db"
-
 
 # Create the async engine and session factory
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)

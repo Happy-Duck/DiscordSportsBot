@@ -1,3 +1,4 @@
+# bot.py
 # The main bot script
 
 # We definitely need these at the very least
@@ -5,7 +6,8 @@ import os
 import discord  # pyright: ignore
 from discord import app_commands  # pyright: ignore
 from dotenv import load_dotenv  # pyright: ignore
-from db_helpers import db_subscribe_player, db_subscribe_team
+from db_helpers import db_subscribe_player, db_subscribe_team, db_member_subscriptions
+from db_skeleton import init_db
 
 # Load ENV variables
 load_dotenv()
@@ -14,6 +16,9 @@ if not TOKEN:
     raise RuntimeError(
         "DISCORD_TOKEN not found. Go to .env and set DISCORD_TOKEN locally."
     )
+
+# supposedly helps speed up testing?
+MY_GUILD = discord.Object(id=1418704334941851722)
 
 
 class MyClient(discord.Client):
@@ -24,6 +29,12 @@ class MyClient(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
+        try:
+            await init_db()
+            print("initialized the database")
+        except Exception as e:
+            print(f"db initializaiton falied, exception: {e}")
+
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
 
@@ -34,11 +45,7 @@ intents.message_content = True
 
 client = MyClient(intents=intents)
 
-# supposedly helps speed up testing?
-MY_GUILD = discord.Object(id=1418704334941851722)
 
-
-# This is temporary (borrowed) for testing if im doing any of this right - Rishi
 @client.event
 async def on_ready():
     print("We have successfully loggged in as {0.user}".format(client))
@@ -81,7 +88,7 @@ async def subscribe_player(interaction: discord.Interaction, full_name: str):
     success, message = await db_subscribe_player(
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
-        player_name=full_name
+        player_name=full_name,
     )
     await interaction.response.send_message(message)
 
@@ -94,7 +101,7 @@ async def subscribe_team(interaction: discord.Interaction, full_name: str):
     success, message = await db_subscribe_team(
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
-        team_name=full_name
+        team_name=full_name,
     )
     await interaction.response.send_message(message)
 
@@ -127,13 +134,19 @@ async def unsubscribe_team(interaction: discord.Interaction, full_name: str):
 @client.tree.command()
 async def subscriptions(interaction: discord.Interaction):
     """Lists all subscribed players and teams"""
+
+    discord_id = str(interaction.user.id)
+    subs = await db_member_subscriptions(discord_id)
+    players = subs["players"]
+    teams = subs["teams"]
+
+    player_text = "\n".join(f"- {p}" for p in players) if players else "None"
+    team_text = "\n".join(f"- {t}" for t in teams) if teams else "None"
+
     await interaction.response.send_message(
-        (
-            "Hi "
-            f"{interaction.user.display_name}!\n"
-            "Here are all of the players you are subscribed to: \n \n "
-            "Here are all of the teams you are subscribed to: \n "
-        )
+        f"""Hi {interaction.user.display_name}!
+        Players you're subscribed to:\n{player_text}
+        Teams you're subscribed to:\n{team_text}"""
     )
 
 

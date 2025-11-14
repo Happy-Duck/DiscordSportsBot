@@ -43,8 +43,7 @@ class Player:
         self.nationality = (
             data.get("strNationality") or data.get("nationality") or self.nationality
         )
-
-        # # age (receive )
+        
         # self.age = data.get("strAge") or data.get("age") or self.age
 
         # # stat

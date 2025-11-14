@@ -6,12 +6,14 @@ import sys
 import json
 from pathlib import Path
 
-PROJECT_ROOT = (
-    Path(__file__).resolve().parent.parent
-)  # getting the root cause the tests are in /tests - painful to figure out this issue by the way
-sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.SportsAPIClient import SportsAPIClient
+# I don't seem to actually be using SportsAPIClient here at all...
+# PROJECT_ROOT = (
+#     Path(__file__).resolve().parent.parent
+# )  # getting the root cause the tests are in /tests - painful to figure out this issue by the way
+# sys.path.insert(0, str(PROJECT_ROOT))
+
+# from src.SportsAPIClient import SportsAPIClient
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("API_FOOTBALL_KEY"),

@@ -6,6 +6,12 @@ import aiohttp
 import sys
 import json
 from pathlib import Path
+
+PROJECT_ROOT = (
+    Path(__file__).resolve().parent.parent
+)  # getting the root cause the tests are in /tests - painful to figure out this issue by the way
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from src.DataClass import Player
 from src.DataClass import Team
 

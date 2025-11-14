@@ -117,3 +117,63 @@ async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
         # initialize the db if stuff doesnt work
         await init_db()
         return {"players": [], "teams": []}
+
+
+async def db_unsubscribe_player(discord_id: str, player_name: str):
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Member).where(Member.discord_id == discord_id)
+        )
+        member = result.scalar_one_or_none()
+        if not member:
+            return False, "Member not found."
+
+        result = await session.execute(
+            select(Player).where(Player.name == player_name)
+        )
+        player = result.scalar_one_or_none()
+        if not player:
+            return False, f"Player '{player_name}' not found."
+        result = await session.execute(
+            select(PlayerSubscription).where(
+                PlayerSubscription.member_id == member.id,
+                PlayerSubscription.player_id == player.id
+            )
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            return False, f"You were not subscribed to '{player_name}'."
+        await session.delete(sub)
+        await session.commit()
+        return True, f"You have been unsubscribed from {player_name}."
+
+
+async def db_unsubscribe_team(discord_id: str, team_name: str):
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Member).where(Member.discord_id == discord_id)
+        )
+        member = result.scalar_one_or_none()
+        if not member:
+            return False, "Member not found."
+
+        result = await session.execute(
+            select(Team).where(Team.name == team_name)
+        )
+        team = result.scalar_one_or_none()
+        if not team:
+            return False, f"Team '{team_name}' not found."
+
+        result = await session.execute(
+            select(TeamSubscription).where(
+                TeamSubscription.member_id == member.id,
+                TeamSubscription.team_id == team.id
+            )
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            return False, f"You were not subscribed to '{team_name}'."
+
+        await session.delete(sub)
+        await session.commit()
+        return True, f"You have been unsubscribed from '{team_name}'."

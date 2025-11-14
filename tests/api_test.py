@@ -72,7 +72,7 @@ async def test_AF_get_player_profile():
             player = players.get("player") 
             if player.get("id") == 154:
                 Argentina_Messi = player
-        assert Argentina_Messi != None
+        assert Argentina_Messi is not None
         assert Argentina_Messi.get("name") == "L. Messi"
         assert Argentina_Messi.get("firstname") == "Lionel Andrés"
         assert Argentina_Messi.get("lastname") == "Messi Cuccittini"

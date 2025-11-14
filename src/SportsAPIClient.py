@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import time
 import json
-from src import DataClass
+from DataClass import Player, Team
 import os
 from dotenv import load_dotenv
 
@@ -56,7 +56,7 @@ class SportsAPIClient:
             # for potential_player in player_list:
             #     print(type(potential_player))
             #     player_info.append(DataClass.Player().from_api_json(potential_player))
-            player_info.append(DataClass.Player().from_api_json(player_list[0]))
+            player_info.append(Player().from_api_json(player_list[0]))
 
             # for i in player_list[0]:
             #     print(i)
@@ -83,7 +83,7 @@ class SportsAPIClient:
             print(team_list[0])
 
             for potential_team in team_list:
-                team_info.append(DataClass.Team().from_api_json(potential_team))
+                team_info.append(Team().from_api_json(potential_team))
 
         return team_info
 

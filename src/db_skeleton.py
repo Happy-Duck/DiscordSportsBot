@@ -14,9 +14,12 @@ from sqlalchemy import (
     Date,
     UniqueConstraint,
 )  # pyright: ignore
+import os
 
 # Use SQLite for local testing, the same DB the bot will connect to
-DATABASE_URL = "sqlite+aiosqlite:///./sportsbot.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # src/
+DATABASE_PATH = os.path.join(BASE_DIR, "sportsbot.db")
+DATABASE_URL = f"sqlite+aiosqlite:///{DATABASE_PATH}"
 
 # Create the async engine and session factory
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)

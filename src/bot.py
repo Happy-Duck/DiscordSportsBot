@@ -1,11 +1,21 @@
+# bot.py
 # The main bot script
 
 # We definitely need these at the very least
 import os
 import discord  # pyright: ignore
+import aiohttp
 from discord import app_commands  # pyright: ignore
 from dotenv import load_dotenv  # pyright: ignore
-from db_helpers import db_subscribe_player, db_subscribe_team
+from db_helpers import (
+    db_subscribe_player,
+    db_subscribe_team,
+    db_subscriptions,
+    db_unsubscribe_player,
+    db_unsubscribe_team
+)
+from db_skeleton import init_db
+from SportsAPIClient import SportsAPIClient
 
 # Load ENV variables
 load_dotenv()
@@ -14,6 +24,9 @@ if not TOKEN:
     raise RuntimeError(
         "DISCORD_TOKEN not found. Go to .env and set DISCORD_TOKEN locally."
     )
+
+# supposedly helps speed up testing?
+MY_GUILD = discord.Object(id=1418704334941851722)
 
 
 class MyClient(discord.Client):
@@ -24,6 +37,12 @@ class MyClient(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
+        try:
+            await init_db()
+            print("initialized the database")
+        except Exception as e:
+            print(f"db initializaiton falied, exception: {e}")
+
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
 
@@ -33,9 +52,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 client = MyClient(intents=intents)
-
-# supposedly helps speed up testing?
-MY_GUILD = discord.Object(id=1418704334941851722)
 
 
 # This is temporary (borrowed) for testing if im doing any of this right - Rishi
@@ -64,13 +80,31 @@ async def on_message(message):
 
 # On demand stats request
 @client.tree.command()
-# @app_commands.rename(full_name='full name')
 @app_commands.describe(full_name="The full name of the player you want the stats of")
 async def stats(interaction: discord.Interaction, full_name: str):
     """Current season statistics for a specific soccer player"""
-    await interaction.response.send_message(
-        "Here are the current stats of " + full_name + ": \n"
-    )
+    await interaction.response.defer(thinking=True)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            api = SportsAPIClient(session)
+            player_info = await api.get_player(full_name)
+
+        if player_info == "Server Down":
+            await interaction.followup.send("The server is currently down")
+            return
+        if not player_info:
+            await interaction.followup.send(f"No player found for '{full_name}'.")
+            return
+
+        p = player_info[0]
+        await interaction.followup.send(
+            f"""Here are the current stats of {p.name}:\nTeam: {p.team}\n"""
+            f"""Position: {p.position}\nNationality: {p.nationality}"""  # \nStats: {p.stats}"""
+        )
+
+    except Exception as e:
+        await interaction.followup.send(f"An error occurred: {e}")
 
 
 # subscribe player command
@@ -107,6 +141,10 @@ async def subscribe_team(interaction: discord.Interaction, full_name: str):
 )
 async def unsubscribe_player(interaction: discord.Interaction, full_name: str):
     """Unsubscribes you from a player"""
+    success, message = await db_unsubscribe_player(
+        discord_id=str(interaction.user.id),
+        player_name=full_name
+    )
     await interaction.response.send_message(
         "You have been unsubscribed from " + full_name
     )
@@ -118,6 +156,10 @@ async def unsubscribe_player(interaction: discord.Interaction, full_name: str):
 @app_commands.describe(full_name="The name of the team you want to unsubscribe from")
 async def unsubscribe_team(interaction: discord.Interaction, full_name: str):
     """Unsubscribes you from a team"""
+    success, message = await db_unsubscribe_team(
+        discord_id=str(interaction.user.id),
+        team_name=full_name
+    )
     await interaction.response.send_message(
         "You have been unsubscribed from " + full_name
     )
@@ -127,13 +169,19 @@ async def unsubscribe_team(interaction: discord.Interaction, full_name: str):
 @client.tree.command()
 async def subscriptions(interaction: discord.Interaction):
     """Lists all subscribed players and teams"""
+
+    discord_id = str(interaction.user.id)
+    subs = await db_subscriptions(discord_id)
+    players = subs["players"]
+    teams = subs["teams"]
+
+    player_text = "\n".join(f"- {p}" for p in players) if players else "None"
+    team_text = "\n".join(f"- {t}" for t in teams) if teams else "None"
+
     await interaction.response.send_message(
-        (
-            "Hi "
-            f"{interaction.user.display_name}!\n"
-            "Here are all of the players you are subscribed to: \n \n "
-            "Here are all of the teams you are subscribed to: \n "
-        )
+        f"""Hi {interaction.user.display_name}!
+        Players you're subscribed to:\n{player_text}
+        Teams you're subscribed to:\n{team_text}"""
     )
 
 

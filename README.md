@@ -244,5 +244,3 @@ Common environment variables (local / dev):
 - `DATABASE_URL` — optional override for the DB connection string
 
 Use `.env` for local development and ensure `.gitignore` excludes it.
-
-```

@@ -15,8 +15,7 @@ from db_helpers import (
     db_unsubscribe_team
 )
 from db_skeleton import init_db
-# from SportsAPIClient import SportsAPIClient
-# commented out for now because it was causing issues for some reason
+from SportsAPIClient import SportsAPIClient
 
 # Load ENV variables
 load_dotenv()

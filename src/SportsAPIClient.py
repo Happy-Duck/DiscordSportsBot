@@ -2,7 +2,7 @@ import aiohttp
 import asyncio
 import time
 import json
-from DataClass import Player, Team # pyright: ignore
+from .DataClass import Player, Team # pyright: ignore
 import os
 from dotenv import load_dotenv
 
@@ -85,7 +85,7 @@ class SportsAPIClient:
         async with self.session.get(URL, headers = AF_Headers, params=params) as response:
             if (response.status == 204):
                 return ""
-            elif (response.status == 499 or response.status == 499):
+            elif (response.status == 499 or response.status == 500):
                 return response.status
             
             player_list = await response.json()
@@ -103,7 +103,7 @@ class SportsAPIClient:
         async with self.session.get(URL, headers = AF_Headers, params=params) as response:
             if (response.status == 204):
                 return ""
-            elif (response.status == 499 or response.status == 499):
+            elif (response.status == 499 or response.status == 500):
                 return response.status
             
             player_list = await response.json()

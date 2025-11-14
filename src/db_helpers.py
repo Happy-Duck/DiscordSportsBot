@@ -1,8 +1,8 @@
 # db_helpers.py
 
 import asyncio
-from sqlalchemy import select, delete
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete  # pyright: ignore
+from sqlalchemy.ext.asyncio import AsyncSession  # pyright: ignore
 from db_skeleton import (
     SessionLocal,
     Member,
@@ -13,7 +13,7 @@ from db_skeleton import (
 )
 from db_skeleton import init_db
 from typing import Dict, List
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError  # pyright: ignore
 
 
 async def get_or_create_member(discord_id: str, username: str) -> Member:

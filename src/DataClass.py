@@ -43,16 +43,17 @@ class Player:
         self.nationality = (
             data.get("strNationality") or data.get("nationality") or self.nationality
         )
-
-        # # age (receive )
-        # self.age = data.get("strNationality") or data.get("nationality") or self.age
+        
+        # self.age = data.get("strAge") or data.get("age") or self.age
 
         # # stat
-        # self.stats = data.get("strNationality") or data.get("nationality") or self.stats
+        # self.stats = data.get("strStats") or data.get("stats") or self.stats
 
         # team info
         self.team = data.get("strTeam") or data.get("team") or self.team
         self.team_id = data.get("idTeam") or data.get("team_id") or self.team_id
+
+        return self
 
 
 # same as above, I should initalize them to none but for now before tests, this shall be fine.

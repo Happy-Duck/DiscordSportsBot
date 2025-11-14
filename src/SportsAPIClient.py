@@ -1,3 +1,5 @@
+# SportsAPIClient.py
+
 import aiohttp
 import asyncio
 import time
@@ -13,7 +15,9 @@ from dotenv import load_dotenv
 load_dotenv()
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 if not API_FOOTBALL_KEY:
-    raise RuntimeError("API_FOOTBALL_KEY not found. Go to .env and set API_FOOTBALL_KEY locally.")
+    raise RuntimeError(
+        "API_FOOTBALL_KEY not found. Go to .env and set API_FOOTBALL_KEY locally."
+    )
 
 AF_Headers = {
     'x-apisports-key': API_FOOTBALL_KEY
@@ -35,10 +39,16 @@ class SportsAPIClient:
 
     async def get_player(self, player):
         # check for either apifootball/sports_db/or both? for now just using sports_DB
-        async with self.session.get(f"{SPORTS_DB_URL}/searchplayers.php?p={player}") as response:
+        async with self.session.get(
+            f"{SPORTS_DB_URL}/searchplayers.php?p={player}"
+        ) as response:
+
+            if not response:
+                print("No response from api")
+                return "Server Dowm"
 
             # kinda wacky not the try/catch.. but... we can prob check the server instead as well.
-            if (200 > response.status or response.status >= 300):
+            if 200 > response.status or response.status >= 300:
                 return "Server Down"
 
             response_object = await response.json()
@@ -56,10 +66,12 @@ class SportsAPIClient:
 
     async def get_team(self, team):
         # check for either apifootball/sports_db or both? for now just using sports_DB
-        async with self.session.get(f"{SPORTS_DB_URL}/searchteams.php?t={team}") as response:
+        async with self.session.get(
+            f"{SPORTS_DB_URL}/searchteams.php?t={team}"
+        ) as response:
 
             # kinda wacky not the try/catch.. but... works
-            if (200 > response.status or response.status >= 300):
+            if 200 > response.status or response.status >= 300:
                 return "Server Down"
 
             response_object = await response.json()

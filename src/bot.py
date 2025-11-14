@@ -81,13 +81,31 @@ async def on_message(message):
 
 # On demand stats request
 @client.tree.command()
-# @app_commands.rename(full_name='full name')
 @app_commands.describe(full_name="The full name of the player you want the stats of")
 async def stats(interaction: discord.Interaction, full_name: str):
     """Current season statistics for a specific soccer player"""
-    await interaction.response.send_message(
-        "Here are the current stats of " + full_name + ": \n"
-    )
+    await interaction.response.defer(thinking=True)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            api = SportsAPIClient(session)
+            player_info = await api.get_player(full_name)
+
+        if player_info == "Server Down":
+            await interaction.followup.send("The server is currently down")
+            return
+        if not player_info:
+            await interaction.followup.send(f"No player found for '{full_name}'.")
+            return
+
+        p = player_info[0]
+        await interaction.followup.send(
+            f"""Here are the current stats of {p.name}:\nTeam: {p.team}\n"""
+            f"""Position: {p.position}\nNationality: {p.nationality}"""  # \nStats: {p.stats}"""
+        )
+
+    except Exception as e:
+        await interaction.followup.send(f"An error occurred: {e}")
 
 
 # subscribe player command

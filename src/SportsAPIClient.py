@@ -50,7 +50,7 @@ class SportsAPIClient:
 
             for potential_player in player_list:
                 print(type(potential_player))
-                player_info.append(DataClass.Player().from_api_json(potential_player))
+                player_info.append(Player().from_api_json(potential_player))
 
         return player_info
 
@@ -72,7 +72,7 @@ class SportsAPIClient:
             print(team_list[0])
 
             for potential_team in team_list:
-                team_info.append(DataClass.Team().from_api_json(potential_team))
+                team_info.append(Team().from_api_json(potential_team))
 
         return team_info
     
@@ -120,7 +120,11 @@ class SportsAPIClient:
         #     return "server is currently down"
         URL = "https://v3.football.api-sports.io/players/profiles"
         params = {
-            "search": player,
+            "id": id,
+            "team": team,
+            "league": league,
+            "season": season,
+            "search": name
             }
         
         async with self.session.get(URL, headers = AF_Headers, params=params) as response:
@@ -144,10 +148,7 @@ class SportsAPIClient:
 
 
 
-# # for testing for now
-# The commented out code block defines an asynchronous function named `main`. Inside this function, it
-# creates an `aiohttp.ClientSession` and then initializes an instance of the `SportsAPIClient` class
-# using this session.
+# for testing for now
 # async def main():
 #     print("something")
 #     async with aiohttp.ClientSession() as session:
@@ -162,7 +163,7 @@ class SportsAPIClient:
 #         # player_team_list = await curr_session.AF_get_player_teams('154')
 #         # print(player_team_list)
         
-#         player_stats = await curr_session.AF_get_player_stat(154, 26, league, season, name)
+#         player_stats = await curr_session.AF_get_player_stat(id =154, team=26, league=, season=2023, name=)
 #         print(player_stats)
         
         

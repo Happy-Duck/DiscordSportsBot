@@ -35,14 +35,18 @@ COPY requirements.txt .
 RUN python -m pip install --upgrade pip setuptools wheel
 RUN pip install -r requirements.txt
 
-RUN adduser --disabled-password --gecos "" --home /nonexistent --no-create-home --uid 10001 appuser \
-    && chown -R appuser:appuser /app
+RUN adduser --disabled-password --gecos "" --home /nonexistent --no-create-home --uid 10001 appuser
+
+# Copy the source code into the container (as root).
+COPY . .
+
+# Ensure the appuser has write permissions to the entire /app directory,
+# especially for the database file that will be created at runtime in /app/src.
+RUN chown -R appuser:appuser /app && \
+    chmod -R u+w /app/src
 
 # Switch to the non-privileged user to run the application.
 USER appuser
-
-# Copy the source code into the container.
-COPY . .
 
 # Expose the port that the application listens on.
 EXPOSE 8000

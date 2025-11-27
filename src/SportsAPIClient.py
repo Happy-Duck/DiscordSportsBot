@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import time
 import json
-from DataClass import Player, Team # pyright: ignore
+from .DataClass import Player, Team # pyright: ignore
 import os
 from dotenv import load_dotenv
 
@@ -16,6 +16,10 @@ load_dotenv()
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 # Note: API_FOOTBALL_KEY is optional and may not be set in test environments
 # Tests will be skipped if the key is not available
+
+AF_Headers = {
+    'x-apisports-key': API_FOOTBALL_KEY
+    }
 
 AF_Headers = {
     'x-apisports-key': API_FOOTBALL_KEY
@@ -56,13 +60,9 @@ class SportsAPIClient:
             # format json so only necessary information is sent and return
             player_info = []
 
-            # for potential_player in player_list:
-            #     print(type(potential_player))
-            #     player_info.append(DataClass.Player().from_api_json(potential_player))
-            player_info.append(Player().from_api_json(player_list[0]))
-
-            # for i in player_list[0]:
-            #     print(i)
+            for potential_player in player_list:
+                print(type(potential_player))
+                player_info.append(Player().from_api_json(potential_player))
 
         return player_info
 
@@ -99,7 +99,7 @@ class SportsAPIClient:
         async with self.session.get(URL, headers = AF_Headers, params=params) as response:
             if (response.status == 204):
                 return ""
-            elif (response.status == 499 or response.status == 499):
+            elif (response.status == 499 or response.status == 500):
                 return response.status
             
             player_list = await response.json()
@@ -117,7 +117,7 @@ class SportsAPIClient:
         async with self.session.get(URL, headers = AF_Headers, params=params) as response:
             if (response.status == 204):
                 return ""
-            elif (response.status == 499 or response.status == 499):
+            elif (response.status == 499 or response.status == 500):
                 return response.status
             
             player_list = await response.json()

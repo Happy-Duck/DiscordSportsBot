@@ -12,7 +12,7 @@ from db_helpers import (
     db_subscribe_team,
     db_subscriptions,
     db_unsubscribe_player,
-    db_unsubscribe_team
+    db_unsubscribe_team,
 )
 from db_skeleton import init_db
 from SportsAPIClient import SportsAPIClient
@@ -54,7 +54,6 @@ intents.message_content = True
 client = MyClient(intents=intents)
 
 
-# This is temporary (borrowed) for testing if im doing any of this right - Rishi
 @client.event
 async def on_ready():
     print("We have successfully loggged in as {0.user}".format(client))
@@ -115,7 +114,7 @@ async def subscribe_player(interaction: discord.Interaction, full_name: str):
     success, message = await db_subscribe_player(
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
-        player_name=full_name
+        player_name=full_name,
     )
     await interaction.response.send_message(message)
 
@@ -128,7 +127,7 @@ async def subscribe_team(interaction: discord.Interaction, full_name: str):
     success, message = await db_subscribe_team(
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
-        team_name=full_name
+        team_name=full_name,
     )
     await interaction.response.send_message(message)
 
@@ -142,8 +141,7 @@ async def subscribe_team(interaction: discord.Interaction, full_name: str):
 async def unsubscribe_player(interaction: discord.Interaction, full_name: str):
     """Unsubscribes you from a player"""
     success, message = await db_unsubscribe_player(
-        discord_id=str(interaction.user.id),
-        player_name=full_name
+        discord_id=str(interaction.user.id), player_name=full_name
     )
     await interaction.response.send_message(
         "You have been unsubscribed from " + full_name
@@ -157,8 +155,7 @@ async def unsubscribe_player(interaction: discord.Interaction, full_name: str):
 async def unsubscribe_team(interaction: discord.Interaction, full_name: str):
     """Unsubscribes you from a team"""
     success, message = await db_unsubscribe_team(
-        discord_id=str(interaction.user.id),
-        team_name=full_name
+        discord_id=str(interaction.user.id), team_name=full_name
     )
     await interaction.response.send_message(
         "You have been unsubscribed from " + full_name

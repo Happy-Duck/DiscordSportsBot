@@ -62,6 +62,7 @@ async def test_real_get_team_request():
             print(raw, "\n")
         assert "Manchester United" in json.dumps(raw)
 
+
 @pytest.mark.asyncio
 async def test_AF_get_player_profile():
     async with aiohttp.ClientSession() as session:
@@ -69,7 +70,7 @@ async def test_AF_get_player_profile():
         result1 = await client.AF_get_player_profile("Messi")
         Argentina_Messi = None
         for players in result1:
-            player = players.get("player") 
+            player = players.get("player")
             if player.get("id") == 154:
                 Argentina_Messi = player
         assert Argentina_Messi is not None
@@ -84,15 +85,22 @@ async def test_AF_get_player_teams():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)
         team_played_1 = await client.AF_get_player_teams("154")
-        
-        expected_list_of_teams_1 = ["Argentina", "Inter Miami", "Paris Saint Germain", "Barcelona", "Argentina U23"] 
+
+        expected_list_of_teams_1 = [
+            "Argentina",
+            "Inter Miami",
+            "Paris Saint Germain",
+            "Barcelona",
+            "Argentina U23",
+        ]
         expected_list_of_id_1 = [26, 9568, 85, 529, 10187]
-        
-        received_list_of_teams_1 = [team.get("team").get("name") for team in team_played_1]
+
+        received_list_of_teams_1 = [
+            team.get("team").get("name") for team in team_played_1
+        ]
         received_list_of_id_1 = [team.get("team").get("id") for team in team_played_1]
-        
+
         for expected_team in expected_list_of_teams_1:
             assert expected_team in received_list_of_teams_1
         for expected_id in expected_list_of_id_1:
             assert expected_id in received_list_of_id_1
-        

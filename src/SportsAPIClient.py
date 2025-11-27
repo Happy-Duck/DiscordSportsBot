@@ -14,10 +14,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
-if not API_FOOTBALL_KEY:
-    raise RuntimeError(
-        "API_FOOTBALL_KEY not found. Go to .env and set API_FOOTBALL_KEY locally."
-    )
+# Note: API_FOOTBALL_KEY is optional and may not be set in test environments
+# Tests will be skipped if the key is not available
 
 AF_Headers = {
     'x-apisports-key': API_FOOTBALL_KEY

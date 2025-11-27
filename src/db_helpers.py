@@ -3,7 +3,7 @@
 import asyncio
 from sqlalchemy import select, delete  # pyright: ignore
 from sqlalchemy.ext.asyncio import AsyncSession  # pyright: ignore
-from db_skeleton import (
+from src.db_skeleton import (
     SessionLocal,
     Member,
     Player,
@@ -11,7 +11,7 @@ from db_skeleton import (
     Team,
     TeamSubscription,
 )
-from db_skeleton import init_db
+from src.db_skeleton import init_db
 from typing import Dict, List
 from sqlalchemy.exc import OperationalError  # pyright: ignore
 

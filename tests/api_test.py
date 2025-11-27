@@ -13,10 +13,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.SportsAPIClient import SportsAPIClient
 
-pytestmark = pytest.mark.skipif(
-    not os.getenv("API_FOOTBALL_KEY"),
-    reason="API_FOOTBALL_KEY not found. Go to .env and set API_FOOTBALL_KEY locally.",
-)
+# Note: These tests use the free SportsDB API which doesn't require an API key
+# The skip condition was removed since these tests don't actually need API_FOOTBALL_KEY
 
 
 # we should be able to follow a similar pattern to test other api stuff

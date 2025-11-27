@@ -7,15 +7,15 @@ import discord  # pyright: ignore
 import aiohttp
 from discord import app_commands  # pyright: ignore
 from dotenv import load_dotenv  # pyright: ignore
-from db_helpers import (
+from src.db_helpers import (
     db_subscribe_player,
     db_subscribe_team,
     db_subscriptions,
     db_unsubscribe_player,
     db_unsubscribe_team
 )
-from db_skeleton import init_db
-from SportsAPIClient import SportsAPIClient
+from src.db_skeleton import init_db
+from src.SportsAPIClient import SportsAPIClient
 
 # Load ENV variables
 load_dotenv()

@@ -1,16 +1,12 @@
 import asyncio
 import os
 import sys
+from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_PATH = os.path.join(BASE_DIR, "..", "src")
-SRC_PATH = os.path.abspath(SRC_PATH)
-DB_PATH = os.path.join(SRC_PATH, "sportsbot.db")
-
-sys.path.insert(0, SRC_PATH)
-
-from database import initialize_database, test_database, add_player_to_team, clear_dummy_data
+from src.database import initialize_database, test_database, add_player_to_team, clear_dummy_data
 
 
 async def run_tests():

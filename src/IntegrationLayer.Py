@@ -58,17 +58,17 @@ class IntegrationLayer:
         return list_of_potential_player[0]['player']
 
 
-# for testing for now
-async def main():
-    first_name = "Federico"
-    last_name = "Bernardeschi"
+# # for testing for now
+# async def main():
+#     first_name = "Federico"
+#     last_name = "Bernardeschi"
 
-    integration_layer = IntegrationLayer()           
-    await integration_layer.initializer()           
+#     integration_layer = IntegrationLayer()           
+#     await integration_layer.initializer()           
 
-    profile, stat = await integration_layer.get_player_and_stats(first_name, last_name)
-    # print(profile)
-    print(stat)
-    await integration_layer.session.close()
+#     profile, stat = await integration_layer.get_player_and_stats(first_name, last_name)
+#     # print(profile)
+#     print(stat)
+#     await integration_layer.session.close()
 
-asyncio.run(main())
+# asyncio.run(main())

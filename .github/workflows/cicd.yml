@@ -8,9 +8,6 @@ name: Python CI/CD
 # runs when you push to any feature branch or PR is made to main
 on:
   push:
-  pull_request: 
-    branches:
-      - main
 
 jobs:
   linter-formatter:

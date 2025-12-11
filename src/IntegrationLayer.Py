@@ -14,6 +14,9 @@ class IntegrationLayer:
         self.session = aiohttp.ClientSession()
         self.sports_api_client = SportsAPIClient(self.session)
     
+    async def close(self):
+        await self.session.close() 
+    
     async def string_match_algorithm(self, list_of_potential_player, first_name, last_name):
         first_name = first_name.lower()
         last_name = last_name.lower()
@@ -73,18 +76,58 @@ class IntegrationLayer:
             
         # return player_profile, player_statistics 
         return player_profile[0]['player'], player_profile[0]['statistics']
+    
+    
+    async def get_team_and_stats(self, team_name, season=2023):
+        # get team_profile and team_id
+        team_profile = await self.sports_api_client.AF_get_team_profile(team_name)
+        
+        # process the error or get first person that pops up for now
+        if (team_profile == 499 or team_profile == 500):
+            return "failure", "Server is currently down. Please Come back Later"
+        elif len(team_profile) == 0:
+            return "failure", "No team was found with given team name. Please check if the team name is correct and complete"
+        
+        team_profile = team_profile[0]['team'] 
+        team_id = team_profile['id']
+        
+        # use team_id to find all leagues that were played
+        team_league = await self.sports_api_client.AF_get_team_league_id(team_id)
+        if (team_league == 499 or team_profile == 500):
+            return "failure", "Server is currently down. Please Come back Later"
+        elif len(team_league) == 0:
+            return "failure", f"There is no record of team playing in a league during {season} season"
+        
+        # league 
+        team_league = [team_league for team in team_league if team['league']['type'] == "League"]
+        
+        if len(team_league) == 0:
+            return "failure", f"There is no record of team playing in a league during {season} season"
+        
+        league_id = team_league[0][0]['league']['id']
+        
+        # # use the league id to get stats and error check
+        team_stat = await self.sports_api_client.AF_get_team_stat(team_id=team_id, league_id=league_id, season=season)
+
+        return team_profile, team_stat
+
 
 # # for testing for now
 # async def main():
 #     first_name = "Lionel"
 #     last_name = "Messi"
+#     team_name = "manchester united"
 
 #     integration_layer = IntegrationLayer()           
 #     await integration_layer.initializer()           
-
-#     profile, stat = await integration_layer.get_player_and_stats(first_name, last_name)
-#     # print(profile)
-#     print(stat)
-#     await integration_layer.session.close()
+    
+#     await integration_layer.get_team_and_stats(team_name=team_name)
+    
+#     team_profile, team_stat = await integration_layer.get_team_and_stats(team_name=team_name)
+#     print(team_profile)
+#     print(team_stat)
+    
+#     await integration_layer.close()
+    
 
 # asyncio.run(main())

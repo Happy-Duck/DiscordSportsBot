@@ -87,6 +87,53 @@ class SportsAPIClient:
             player_list = await response.json()
 
         return player_list['response']
+    
+    async def AF_get_team_profile(self, team_name):
+        URL = "https://v3.football.api-sports.io/teams"
+        
+        params = {
+            "name": team_name,
+        }
+        
+        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
+            if (response.status == 204):
+                return []
+            elif (response.status == 499 or response.status == 500):
+                return response.status
+            team_profile = await response.json()
+
+        return team_profile['response']
+        
+    async def AF_get_team_league_id(self, team_id, season=2023):
+        URL = "https://v3.football.api-sports.io/leagues"
+        
+        params = {
+            "season": season,
+            "team": team_id,
+        }
+        
+        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
+            if (response.status == 204):
+                return []
+            elif (response.status == 499 or response.status == 500):
+                return response.status
+            team_league_list = await response.json()
+        return team_league_list['response']
+    
+    async def AF_get_team_stat(self, team_id, league_id, season=2023):
+        URL = "https://v3.football.api-sports.io/teams/statistics"
+        params = {
+            "league": league_id,
+            "season": season,
+            "team": team_id,
+        }
+        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
+            if (response.status == 204):
+                return []
+            elif (response.status == 499 or response.status == 500):
+                return response.status
+            team_statistics = await response.json()
+        return team_statistics['response']
 
 
 # # for testing for now
@@ -100,30 +147,17 @@ class SportsAPIClient:
 #         return json.load(f)
 
 # async def main():
-#     # print("something")
-#     # async with aiohttp.ClientSession() as session:
-#     #     curr_session = SportsAPIClient(session)
-#     #     test_player = "L"
-
-#     #     player_list = await curr_session.AF_get_player_profile("Messi")
-#     #     save_data(player_list)
+#     team_name = "manchester united"
+#     async with aiohttp.ClientSession() as session:
+#         curr_session = SportsAPIClient(session)
+#         response = await curr_session.AF_get_team_profile(team_name)
+#         print(response)
         
-#     #     # player_stats = await curr_session.AF_get_player_stat(id = 873, season=2023)
+#         response2 = await curr_session.AF_get_team_league_id(team_id = response[0]['team']['id'])
+#         print(response2)
         
-        
-#     #     # team_info = await curr_session.AF_get_team(test_team)
-        
-#     #     # for future test. messi -> memberid = 154 / brazil team = 26 /
-#     first_name = "Lionel"
-#     last_name = "Messi"
-    
-#     data_saved = load_data()
-#     best_player = fuzzy_algorithm(data_saved, first_name=first_name, last_name=last_name)
-
-#     # print(best_player['id'])    
-#     # print(best_player['name'])
-#     # print(best_player['firstname'])
-#     # print(best_player['lastname'])
-    
+#         response3 = await curr_session.AF_get_team_stat(team_id=33, league_id=39)
+#         print(response3)
 
 # asyncio.run(main())
+

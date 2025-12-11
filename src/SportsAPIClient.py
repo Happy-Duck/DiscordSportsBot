@@ -2,11 +2,10 @@
 
 import aiohttp
 import asyncio
-import time
 import json
-from .DataClass import Player, Team # pyright: ignore
 import os
 from dotenv import load_dotenv
+import unicodedata
 
 # API_Football_key is required if you want to use it.
 # Default Sports_DB_Key is 3.
@@ -91,20 +90,40 @@ class SportsAPIClient:
 
 
 # # for testing for now
-# async def main():
-#     print("something")
-#     async with aiohttp.ClientSession() as session:
-#         curr_session = SportsAPIClient(session)
-#         test_player = "Federico Bernardeschi"
 
-#         # player_list = await curr_session.AF_get_player_profile(test_player.split()[1])
-#         # print(player_list)
+# def save_data(data, filename="output.json"):
+#     with open(filename, "w") as f:
+#         json.dump(data, f, indent=4)
+
+# def load_data(filename="output.json"):
+#     with open(filename, "r") as f:
+#         return json.load(f)
+
+# async def main():
+#     # print("something")
+#     # async with aiohttp.ClientSession() as session:
+#     #     curr_session = SportsAPIClient(session)
+#     #     test_player = "L"
+
+#     #     player_list = await curr_session.AF_get_player_profile("Messi")
+#     #     save_data(player_list)
         
-#         player_stats = await curr_session.AF_get_player_stat(id = 873, season=2023)
-#         print(player_stats)
+#     #     # player_stats = await curr_session.AF_get_player_stat(id = 873, season=2023)
         
-#         # team_info = await curr_session.AF_get_team(test_team)
         
-#         # for future test. messi -> memberid = 154 / brazil team = 26 / 
+#     #     # team_info = await curr_session.AF_get_team(test_team)
+        
+#     #     # for future test. messi -> memberid = 154 / brazil team = 26 /
+#     first_name = "Lionel"
+#     last_name = "Messi"
+    
+#     data_saved = load_data()
+#     best_player = fuzzy_algorithm(data_saved, first_name=first_name, last_name=last_name)
+
+#     # print(best_player['id'])    
+#     # print(best_player['name'])
+#     # print(best_player['firstname'])
+#     # print(best_player['lastname'])
+    
 
 # asyncio.run(main())

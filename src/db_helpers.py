@@ -34,16 +34,8 @@ async def get_or_create_member(discord_id: str, username: str) -> Member:
         return member
 
 
-# db_helpers.py
-# Replace the existing db_subscribe_player with this version
-
-
-async def db_subscribe_player(discord_id: str, username: str, player_name: str):
-    """
-    Subscribe a member to a player. If the player does not exist in the local DB,
-    try to fetch from the external Sports API (SportsAPIClient.get_player). If the
-    API returns a match, insert Team (if needed) and Player rows, then create the subscription.
-    """
+async def db_subscribe_player(discord_id: str, username: str, player_name: str, 
+                              channel_id: str = None, guild_id: str = None):
     async with SessionLocal() as session:
         member = await get_or_create_member(discord_id, username)
 
@@ -126,35 +118,47 @@ async def db_subscribe_player(discord_id: str, username: str, player_name: str):
         )
         sub = result.scalar_one_or_none()
         if not sub:
-            sub = PlayerSubscription(member_id=member.id, player_id=player.id)
+            sub = PlayerSubscription(member_id=member.id, player_id=player.id,
+                                     channel_id=channel_id, guild_id=guild_id)
             session.add(sub)
             await session.commit()
             return True, f"You have been subscribed to {player.name}!"
         else:
-            return True, f"You are already subscribed to {player.name}."
+            if channel_id is not None:
+                sub.channel_id = channel_id
+            if guild_id is not None:
+                sub.guild_id = guild_id
+
+        await session.commit()
+        return True, f"You have been subscribed to {player_name}!"
 
 
-async def db_subscribe_team(discord_id: str, username: str, team_name: str):
+async def db_subscribe_team(discord_id: str, username: str, team_name: str, channel_id: str = None,
+                            guild_id: str = None):
     async with SessionLocal() as session:
         member = await get_or_create_member(discord_id, username)
 
         result = await session.execute(select(Team).where(Team.name == team_name))
-        player = result.scalar_one_or_none()  # single scalar value or None
-        if not player:
+        team = result.scalar_one_or_none()  # single scalar value or None
+        if not team:
             return False, f"Team '{team_name}' not found."
 
         result = await session.execute(
             select(TeamSubscription).where(
                 TeamSubscription.member_id == member.id,
-                TeamSubscription.team_id == player.id,
+                TeamSubscription.team_id == team.id,
             )
         )
         sub = result.scalar_one_or_none()
         if not sub:
-            sub = TeamSubscription(member_id=member.id, team_id=player.id)
+            sub = TeamSubscription(member_id=member.id, team_id=team.id,
+                                   channel_id=channel_id, guild_id=guild_id)
             session.add(sub)
         else:
-            pass
+            if channel_id is not None:
+                sub.channel_id = channel_id
+            if guild_id is not None:
+                sub.guild_id = guild_id
 
         await session.commit()
         return True, f"You have been subscribed to {team_name}!"

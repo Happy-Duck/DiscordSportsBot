@@ -24,10 +24,10 @@ A Discord bot that provides sports-related functionality (player/team subscripti
 ## Project overview
 
 Main pieces in this repo:
-- Bot entrypoint: `bot.py` — Discord commands and interaction handlers.
-- Database schema and async engine: `db_skeleton.py`, `setup_database.py`, `database.py`, `db_helpers.py`.
-- API client: `SportsAPIClient.py` (wraps external sports APIs).
-- Utilities & tests: `database_tests.py`, `api_test.py`, and other helpers.
+- Bot entrypoint: `src/bot.py` — Discord commands and interaction handlers.
+- Database schema and async engine: `src/db_skeleton.py`, `src/setup_database.py`, `src/database.py`, `src/db_helpers.py`.
+- API client: `src/SportsAPIClient.py` (wraps external sports APIs).
+- Utilities & tests: `tests/database_tests.py`, `tests/api_test.py`, and other helpers.
 - Docker compose file: `compose.yaml` (service named `server`).
 - `.env` template: `RenameTo.env` (rename to `.env` and set tokens).
 
@@ -64,13 +64,11 @@ Requirements:
    pip install -r requirements.txt
    ```
 
-4. Create the local SQLite database (Ayana’s initializer)
+4. Create the local SQLite database
    ```
-   python setup_database.py
+   python src/setup_database.py
    ```
-   This creates `sportsbot.db` in the project root (default defined in `db_skeleton.py`).
-
-   If another initializer exists (e.g., `scripts/init_db.py`), run that instead.
+   This creates `src/sportsbot.db` (default defined in `src/db_skeleton.py`).
 
 5. Add environment variables
    - Copy/rename the template:
@@ -79,19 +77,16 @@ Requirements:
      ```
      Edit `.env` and set:
      - `DISCORD_TOKEN=your_discord_bot_token`
-     - `API_FOOTBALL_KEY=your_api_key` (optional; API tests/requests may be skipped without it)
+     - `API_FOOTBALL_KEY=your_api_key` (optional; required for some tests and future API integration)
 
    Important: never commit `.env` or any tokens.
 
 6. Run the bot locally
-   - Example:
-     ```
-     export DISCORD_TOKEN="..."    # macOS / Linux
-     python bot.py
-     ```
-   - If the project layout differs, use the correct module entrypoint (e.g., `python -m src.bot`).
+   ```
+   python src/bot.py
+   ```
 
-Note: For single-guild command testing, update `MY_GUILD` in `bot.py`.
+Note: For single-guild command testing, update `MY_GUILD` in `src/bot.py`.
 
 ---
 
@@ -109,30 +104,28 @@ The repo includes `compose.yaml` (service `server`) and a Dockerfile.
    docker compose up --build -d
    ```
 
-3. The compose file maps port `8000:8000` by default; adjust if needed.
+3. The compose file maps port `8000:8000` by default.
 
 Notes:
 - On Apple Silicon or different architectures:
   ```
   docker build --platform=linux/amd64 -t discord-sports-bot .
   ```
-- If tests fail in the container due to path issues, run tests locally for debugging (Ayana and Rishi used that workflow).
+- If tests fail in the container due to path issues, run tests locally for debugging.
 
 ---
 
 ## Database initialization
 
-- Primary initializer: `setup_database.py` — creates tables via `db_skeleton.init_db()`:
+- Primary initializer: `src/setup_database.py` — creates tables via `src/db_skeleton.init_db()`:
   ```
-  python setup_database.py
+  python src/setup_database.py
   ```
-- Helper functions in `database.py`:
-  - `initialize_database()`, `ensure_tables(...)`, `test_database()`, `clear_dummy_data()`
-- Default DB URL in `db_skeleton.py`:
+- Helper functions in `src/database.py`.
+- Default DB URL in `src/db_skeleton.py`:
   ```
-  DATABASE_URL = "sqlite+aiosqlite:///./sportsbot.db"
+  DATABASE_URL = "sqlite+aiosqlite:///./src/sportsbot.db"
   ```
-  For CI or containerized runs, override via `DATABASE_URL` env var if needed.
 
 ---
 
@@ -144,14 +137,13 @@ This project uses `pytest` and `pytest-asyncio`.
   ```
   pytest
   ```
-- Integration tests that call external APIs (e.g., `api_test.py`) are skipped unless `API_FOOTBALL_KEY` is set.
-- If tests fail due to DB path mismatches in Docker, ensure the container DB path matches test expectations (e.g., `database_tests.py` uses `/app/src/sportsbot.db`), or run tests locally.
+- Integration tests that call external APIs (e.g., `tests/api_test.py`) are skipped unless `API_FOOTBALL_KEY` is set.
 
 ---
 
 ## Code quality rules
 
-CI runs an auto-formatter and tests. Hyunho temporarily disabled `flake8` in CI due to preexisting lint errors; please help re-enable it by following these steps before opening a PR.
+CI runs an auto-formatter and tests.
 
 1. Formatting
    - Run Black:
@@ -159,78 +151,48 @@ CI runs an auto-formatter and tests. Hyunho temporarily disabled `flake8` in CI 
      black .
      ```
 
-2. Imports
-   - If present, run isort:
-     ```
-     isort .
-     ```
-
-3. Linting (critical)
-   - Run flake8 and fix issues:
+2. Linting
+   - Run flake8:
      ```
      flake8
      ```
-   - Typical fixes: remove unused imports/variables, fix line lengths and comment formatting, spacing/indentation.
-   - If an import is required for side effects and flake8 flags it as unused, add:
-     ```
-     from some.module import plugin  # noqa: F401  # required for plugin registration
-     ```
-
-4. Pre-commit (optional but recommended)
-   - If `.pre-commit-config.yaml` exists:
-     ```
-     pip install pre-commit
-     pre-commit install
-     pre-commit run --all-files
-     ```
-
-5. Commit & PR guidance
-   - Keep commits small and focused.
-   - For formatting-only changes, use a single commit with a clear title: `style: run formatter`.
-   - In PR description, state whether the PR is formatting-only or contains logic changes.
 
 Suggested quick local check before PR:
 ```
-black . && isort . && flake8 && pytest
+black . && flake8 && pytest
 ```
 
 ---
 
 ## Usage
 
-Invite (example):
-```
-https://discord.com/oauth2/authorize?client_id=1427527753154171020
-```
-(Replace `client_id` if you use a different application.)
+Invite: use your bot's OAuth2 URL.
 
-Slash commands available (server):
-- `/subscribe_player [player name]` — subscribe to a player
-- `/subscribe_team [team name]` — subscribe to a team
-- `/unsubscribe_player [player name]` — unsubscribe from a player
-- `/unsubscribe_team [team name]` — unsubscribe from a team
-- `/stats [player name]` — current season stats for a player
-- `/subscriptions` — list your subscriptions
+**Slash Commands:**
+- `/stats [full_name]` — Fetch current season stats for a soccer player (uses TheSportsDB).
+- `/subscribe_player [full_name]` — Subscribe to player updates.
+- `/subscribe_team [full_name]` — Subscribe to team updates.
+- `/unsubscribe_player [full_name]` — Unsubscribe from a player.
+- `/unsubscribe_team [full_name]` — Unsubscribe from a team.
+- `/subscriptions` — List your active subscriptions.
+
+**Chat Triggers:**
+- "sports" — The bot responds with enthusiasm.
+- "football" — The bot attempts to correct you to "soccer".
 
 ---
 
 ## Project status & known limitations
 
-Current status:
-- Core bot scaffolding, DB schema, and DB initializer exist.
-- Team can create a local `.db` and run basic tests.
-- CI runs tests and the auto-formatter; `flake8` is disabled in CI pending cleanup.
+**Current Status:**
+- Functional Discord bot with subscription management and player statistics retrieval.
+- Database: Local SQLite for storing user subscriptions.
+- API: Currently relies on `TheSportsDB` for player and team data in the active commands. `API-Football` implementation is in progress.
 
-Known blockers / limitations:
-- External sports APIs:
-  - Free API tiers often have low rate limits (e.g., APIFootball ~100 requests/day) or stale data (some free tiers return last data from 2023).
-  - Some endpoints return multiple "similar" player matches instead of a single canonical player, requiring user disambiguation.
-  - Due to these limits, the team is evaluating switching to targeted web scraping (e.g., ESPN) to obtain up-to-date real-time stats (goals, assists). Coordinate with the team before major API-client changes.
-
-Short guidance for API work:
-- Keep API keys out of source control.
-- Implement caching and rate-limit handling.
-- Add a disambiguation flow when API returns multiple player candidates.
+**Known Limitations:**
+- **Data Source**: The free tier of some sports APIs has constraints. We are currently using `TheSportsDB` which works well for basic info but might have different coverage than `API-Football`.
+- **API Limits**: Rate limits apply.
+- **Disambiguation**: Use full player names for best results.
 
 ---
 
@@ -238,9 +200,9 @@ Short guidance for API work:
 
 Do not commit secrets.
 
-Common environment variables (local / dev):
+Common environment variables:
 - `DISCORD_TOKEN` — Discord bot token (required)
-- `API_FOOTBALL_KEY` — external API key (optional; enables integration tests)
+- `API_FOOTBALL_KEY` — API-Football key (optional for now)
 - `DATABASE_URL` — optional override for the DB connection string
 
-Use `.env` for local development and ensure `.gitignore` excludes it.
+Use `.env` for local development.

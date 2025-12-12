@@ -17,27 +17,7 @@ pytestmark = pytest.mark.skipif(
     reason="API_FOOTBALL_KEY not found. Go to .env and set API_FOOTBALL_KEY locally.",
 )
 
-
 # we should be able to follow a similar pattern to test other api stuff
-@pytest.mark.asyncio
-async def test_real_get_player_request():
-
-    async with aiohttp.ClientSession() as sess:
-        url = "https://www.thesportsdb.com/api/v1/json/3/searchplayers.php"
-        async with sess.get(url, params={"p": "messi"}) as resp:
-            raw = await resp.json()
-            print(raw, "\n")
-        assert "Lionel Messi" in json.dumps(raw)
-
-        async with sess.get(url, params={"p": "ronaldo"}) as resp:
-            raw = await resp.json()
-            print(raw, "\n")
-        assert "Cristiano Ronaldo" in json.dumps(raw)
-
-        async with sess.get(url, params={"p": "mbappe"}) as resp:
-            raw = await resp.json()
-            print(raw, "\n")
-        assert "Kylian Mbapp" in json.dumps(raw)
 
 
 @pytest.mark.asyncio

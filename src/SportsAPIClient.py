@@ -2,11 +2,11 @@
 
 import aiohttp
 import asyncio
-import time
 import json
-from .DataClass import Player, Team  # pyright: ignore
+from DataClass import Player, Team  # pyright: ignore
 import os
 from dotenv import load_dotenv
+import unicodedata
 
 # API_Football_key is required if you want to use it.
 # Default Sports_DB_Key is 3.
@@ -129,8 +129,6 @@ class SportsAPIClient:
         url = "https://v3.football.api-sports.io/players/profiles"
         params = {
             "id": id,
-            "team": team,
-            "league": league,
             "season": season,
             "search": name
         }
@@ -151,9 +149,8 @@ class SportsAPIClient:
 
     #     return ""
 
-# for testing for now
 # async def main():
-#     print("something")
+#     team_name = "manchester united"
 #     async with aiohttp.ClientSession() as session:
 #         curr_session = SportsAPIClient(session)
 #         test_player = "Lionel Messi"
@@ -175,3 +172,4 @@ class SportsAPIClient:
 #         # for future test. messi -> memberid = 154 / brazil team = 26 /
 
 # asyncio.run(main())
+

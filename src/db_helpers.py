@@ -190,7 +190,35 @@ async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
             )
             teams = [t.name for t in result_teams.scalars().unique().all()]
 
-            return {"players": players, "teams": teams}
+            result_channel = await session.execute(
+                select(PlayerSubscription.channel_id)
+                .where(PlayerSubscription.member_id == member.id)
+            )
+            channel_id = result_channel.scalar_one_or_none()
+
+            result_guild = await session.execute(
+                select(PlayerSubscription.guild_id)
+                .where(PlayerSubscription.member_id == member.id)
+            )
+            guild_id = result_guild.scalar_one_or_none()
+
+            if channel_id is None:
+                result_channel = await session.execute(
+                    select(TeamSubscription.channel_id)
+                    .where(TeamSubscription.member_id == member.id)
+                )
+                channel_id = result_channel.scalar_one_or_none()
+
+            if guild_id is None:
+                result_guild = await session.execute(
+                    select(TeamSubscription.guild_id)
+                    .where(TeamSubscription.member_id == member.id)
+                )
+                guild_id = result_guild.scalar_one_or_none()
+
+            return {"players": players, "teams": teams, "channel_id": channel_id,
+                    "guild_id": guild_id}
+
     except OperationalError:
         # initialize the db if stuff doesnt work
         await init_db()

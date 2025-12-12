@@ -3,7 +3,7 @@
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession  # pyright: ignore
 from sqlalchemy import select, delete  # pyright: ignore
-from src.db_skeleton import (
+from db_skeleton import (
     SessionLocal,
     Base,
     engine,

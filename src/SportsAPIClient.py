@@ -55,7 +55,7 @@ class SportsAPIClient:
             player_info = []
 
             for potential_player in player_list:
-                print(type(potential_player))
+                # print(type(potential_player))
                 player_info.append(Player().from_api_json(potential_player))
 
         return player_info
@@ -85,12 +85,12 @@ class SportsAPIClient:
         return team_info
 
     async def AF_get_player_profile(self, player):
-        URL = "https://v3.football.api-sports.io/players/profiles"
+        url = "https://v3.football.api-sports.io/players/profiles"
         params = {
             "search": player,
         }
 
-        async with self.session.get(URL, headers=AF_Headers, params=params) as response:
+        async with self.session.get(url, headers=AF_Headers, params=params) as response:
             if response.status == 204:
                 return ""
             elif response.status == 499 or response.status == 500:
@@ -108,7 +108,7 @@ class SportsAPIClient:
             "player": player_id,
         }
 
-        async with self.session.get(URL, headers=AF_Headers, params=params) as response:
+        async with self.session.get(url, headers=AF_Headers, params=params) as response:
             if response.status == 204:
                 return ""
             elif response.status == 499 or response.status == 500:
@@ -131,7 +131,7 @@ class SportsAPIClient:
             "search": name,
         }
 
-        async with self.session.get(URL, headers=AF_Headers, params=params) as response:
+        async with self.session.get(url, headers=AF_Headers, params=params) as response:
             if response.status == 204:
                 return ""
             elif response.status == 499 or response.status == 499:
@@ -146,6 +146,7 @@ class SportsAPIClient:
     #     season = 2023
 
     #     return ""
+
 
 # async def main():
 #     team_name = "manchester united"
@@ -171,4 +172,3 @@ class SportsAPIClient:
 #         # for future test. messi -> memberid = 154 / brazil team = 26 /
 
 # asyncio.run(main())
-

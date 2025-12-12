@@ -30,8 +30,8 @@ class IntegrationLayer:
         # Then do exact search to see if the desired name is present
         for player in list_of_potential_player:
             if (
-                player["player"]["firstname"] == None
-                or player["player"]["lastname"] == None
+                player["player"]["firstname"] is None
+                or player["player"]["lastname"] is None
             ):
                 continue
             # normalize first and last name first
@@ -60,7 +60,7 @@ class IntegrationLayer:
             return first_names
 
     async def get_player_and_stats(self, first_name, last_name, season=2023):
-        best_player = []
+        # best_player = []
         # if id exists in the cache you shouldn't need the first part
 
         # else use get_player

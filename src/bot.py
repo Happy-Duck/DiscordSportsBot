@@ -25,8 +25,11 @@ if not TOKEN:
         "DISCORD_TOKEN not found. Go to .env and set DISCORD_TOKEN locally."
     )
 
+POLL_INTERVAL = 10
+
 # supposedly helps speed up testing?
 MY_GUILD = discord.Object(id=1418704334941851722)
+BOT_TESTING_CHANNEL = 1428577092228091964
 
 BOT_TESTING_CHANNEL = 1428577092228091964
 POLL_INTERVAL = 10

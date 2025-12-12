@@ -30,8 +30,7 @@ class IntegrationLayer:
         # Then do exact search to see if the desired name is present
         for player in list_of_potential_player:
             if (
-                player["player"]["firstname"] is None
-                or player["player"]["lastname"] is None
+                player["player"]["firstname"] is None or player["player"]["lastname"] is None
             ):
                 continue
             # normalize first and last name first
@@ -46,8 +45,7 @@ class IntegrationLayer:
             player["player"]["lastname"] = normalized_last_name
 
             if (
-                first_name in normalized_first_name
-                and last_name in normalized_last_name
+                first_name in normalized_first_name and last_name in normalized_last_name
             ):
                 trickled_list.append(player)
                 first_names.append(player["player"]["firstname"])
@@ -74,7 +72,8 @@ class IntegrationLayer:
         elif len(list_of_potential_player) == 0:
             return (
                 "failure",
-                "No player with the first and last name exists. Please check if the first and last name spelling is correct",
+                "No player with the first and last name exists. \
+                    Please check if the first and last name spelling is correct",
             )
         else:
             best_match = await self.string_match_algorithm(
@@ -83,13 +82,15 @@ class IntegrationLayer:
             if len(best_match) == 0:
                 return (
                     "failure",
-                    "No player with the first and last name exists. Please check if the first and last name spelling is correct",
+                    "No player with the first and last name exists. \
+                        Please check if the first and last name spelling is correct",
                 )
             elif len(best_match) > 1:
                 matching_players = ", ".join(best_match)
                 return (
                     "failure",
-                    f"there's many players with the first name including {matching_players} Please retry with any one of these more precise first name",
+                    f"there's many players with the first name including {matching_players} \
+                        Please retry with any one of these more precise first name",
                 )
             elif len(best_match) == 1:
                 best_match = best_match[0]["player"]
@@ -116,7 +117,8 @@ class IntegrationLayer:
         elif len(team_profile) == 0:
             return (
                 "failure",
-                "No team was found with given team name. Please check if the team name is correct and complete",
+                "No team was found with given team name. \
+                    Please check if the team name is correct and complete",
             )
 
         team_profile = team_profile[0]["team"]

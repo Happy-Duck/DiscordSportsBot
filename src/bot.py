@@ -1,21 +1,21 @@
 # bot.py
 # The main bot script
 
-# We definitely need these at the very least
 import os
 import discord  # pyright: ignore
 import aiohttp
+import asyncio
 from discord import app_commands  # pyright: ignore
 from dotenv import load_dotenv  # pyright: ignore
-from src.db_helpers import (
+from db_helpers import (
     db_subscribe_player,
     db_subscribe_team,
     db_subscriptions,
     db_unsubscribe_player,
     db_unsubscribe_team,
 )
-from src.db_skeleton import init_db
-from src.SportsAPIClient import SportsAPIClient
+from db_skeleton import init_db
+from SportsAPIClient import SportsAPIClient
 
 # Load ENV variables
 load_dotenv()
@@ -28,6 +28,9 @@ if not TOKEN:
 # supposedly helps speed up testing?
 MY_GUILD = discord.Object(id=1418704334941851722)
 
+BOT_TESTING_CHANNEL = 1428577092228091964
+POLL_INTERVAL = 10
+
 
 class MyClient(discord.Client):
     user: discord.ClientUser
@@ -35,6 +38,8 @@ class MyClient(discord.Client):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
+        self._poster_task: asyncio.Task
+        self._shutdown = False
 
     async def setup_hook(self):
         try:
@@ -45,6 +50,56 @@ class MyClient(discord.Client):
 
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
+
+        self._poster_task = asyncio.create_task(self.list_subscriptions())
+
+    async def close(self):
+        self._shutdown = True
+        if self._poster_task:
+            self._poster_task.cancel()
+            try:
+                await self._poster_task
+            except asyncio.CancelledError:
+                pass
+        await super().close()
+
+    async def list_subscriptions(self):
+        """
+        Subscriptions, posts updates in x second interval
+        """
+        try:
+            channel_id = int(BOT_TESTING_CHANNEL)
+        except Exception:
+            print("invalid BOT_TESTING_CHANNEL")
+            return
+
+        while not self._shutdown:
+            try:
+                channel = self.get_channel(channel_id)
+                if channel is None:
+                    try:
+                        channel = await self.fetch_channel(channel_id)
+                    except Exception as e:
+                        print(f"could not fetch channel {channel_id}: {e}")
+                        # wait and retry later
+                        continue
+                try:
+                    await channel.send(
+                        "Here is information about your subscriptions! DUMMY"
+                    )
+                except discord.Forbidden:
+                    print(f"bot cannot send messages to channel {channel_id}")
+                except Exception as e:
+                    print(f"failed to send to channel {channel_id}: {e}")
+
+                # wait for next interval
+                await asyncio.sleep(POLL_INTERVAL)
+
+            except asyncio.CancelledError:
+                print("background poster cancelled")
+                break
+            except Exception as e:
+                print(f"unhandled error in background poster: {e}")
 
 
 # Set up Discord bot with message content intent enabled

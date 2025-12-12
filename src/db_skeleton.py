@@ -1,19 +1,19 @@
 # db_skeleton.py
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  # pyright: ignore
-from sqlalchemy.orm import (
+from sqlalchemy.orm import (  # pyright: ignore
     sessionmaker,
     declarative_base,
     relationship,
-)  # pyright: ignore
-from sqlalchemy import (
+)
+from sqlalchemy import (  # pyright: ignore
     Column,
     Integer,
     String,
     ForeignKey,
     Date,
     UniqueConstraint,
-)  # pyright: ignore
+)
 import os
 
 # Use SQLite for local testing, the same DB the bot will connect to

@@ -3,7 +3,7 @@
 import asyncio
 from sqlalchemy import select, delete  # pyright: ignore
 from sqlalchemy.ext.asyncio import AsyncSession  # pyright: ignore
-from src.db_skeleton import (
+from db_skeleton import (
     SessionLocal,
     Member,
     Player,
@@ -11,7 +11,7 @@ from src.db_skeleton import (
     Team,
     TeamSubscription,
 )
-from src.db_skeleton import init_db
+from db_skeleton import init_db
 from typing import Dict, List
 from sqlalchemy.exc import OperationalError  # pyright: ignore
 
@@ -128,16 +128,14 @@ async def db_unsubscribe_player(discord_id: str, player_name: str):
         if not member:
             return False, "Member not found."
 
-        result = await session.execute(
-            select(Player).where(Player.name == player_name)
-        )
+        result = await session.execute(select(Player).where(Player.name == player_name))
         player = result.scalar_one_or_none()
         if not player:
             return False, f"Player '{player_name}' not found."
         result = await session.execute(
             select(PlayerSubscription).where(
                 PlayerSubscription.member_id == member.id,
-                PlayerSubscription.player_id == player.id
+                PlayerSubscription.player_id == player.id,
             )
         )
         sub = result.scalar_one_or_none()
@@ -157,9 +155,7 @@ async def db_unsubscribe_team(discord_id: str, team_name: str):
         if not member:
             return False, "Member not found."
 
-        result = await session.execute(
-            select(Team).where(Team.name == team_name)
-        )
+        result = await session.execute(select(Team).where(Team.name == team_name))
         team = result.scalar_one_or_none()
         if not team:
             return False, f"Team '{team_name}' not found."
@@ -167,7 +163,7 @@ async def db_unsubscribe_team(discord_id: str, team_name: str):
         result = await session.execute(
             select(TeamSubscription).where(
                 TeamSubscription.member_id == member.id,
-                TeamSubscription.team_id == team.id
+                TeamSubscription.team_id == team.id,
             )
         )
         sub = result.scalar_one_or_none()

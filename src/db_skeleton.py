@@ -160,6 +160,8 @@ class PlayerSubscription(Base):
     id = Column(Integer, primary_key=True)
     member_id = Column(Integer, ForeignKey("members.id"))
     player_id = Column(Integer, ForeignKey("players.id"))
+    channel_id = Column(String(50), nullable=True)
+    guild_id = Column(String(50), nullable=True)
     notify_on_goal = Column(Integer, default=1)
     notify_on_card = Column(Integer, default=1)
     notify_on_match = Column(Integer, default=0)
@@ -175,6 +177,8 @@ class TeamSubscription(Base):
     id = Column(Integer, primary_key=True)
     member_id = Column(Integer, ForeignKey("members.id"))
     team_id = Column(Integer, ForeignKey("teams.id"))
+    channel_id = Column(String(50), nullable=True)
+    guild_id = Column(String(50), nullable=True)
     notify_on_goal = Column(Integer, default=0)
     notify_on_match = Column(Integer, default=1)
     # Tracking team cards likely requires per-player aggregation and mapping.

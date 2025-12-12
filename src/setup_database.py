@@ -1,7 +1,7 @@
 # setup_database.py
 
 import asyncio
-from src.db_skeleton import init_db
+from db_skeleton import init_db
 
 
 async def main():

@@ -217,6 +217,7 @@ async def on_ready():
     print("We have successfully loggged in as {0.user}".format(client))
 
 
+# easter egg message responses
 @client.event
 async def on_message(message):
     if message.author == client.user:
@@ -303,7 +304,7 @@ async def subscribe_player(interaction: discord.Interaction, full_name: str):
         username=interaction.user.name,
         player_name=full_name,
         channel_id=str(interaction.channel_id),
-        guild_id=str(interaction.guild_id)
+        guild_id=str(interaction.guild_id),
     )
     await interaction.response.send_message(message)
 
@@ -318,7 +319,7 @@ async def subscribe_team(interaction: discord.Interaction, full_name: str):
         username=interaction.user.name,
         team_name=full_name,
         channel_id=str(interaction.channel_id),
-        guild_id=str(interaction.guild_id)
+        guild_id=str(interaction.guild_id),
     )
     await interaction.response.send_message(message)
 

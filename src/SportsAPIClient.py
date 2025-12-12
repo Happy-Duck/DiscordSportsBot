@@ -84,7 +84,7 @@ class SportsAPIClient:
 
         return team_info
 
-    async def AF_get_player_profile(self, player):
+    async def af_get_player_profile(self, player):
         url = "https://v3.football.api-sports.io/players/profiles"
         params = {
             "search": player,
@@ -146,6 +146,16 @@ class SportsAPIClient:
     #     season = 2023
 
     #     return ""
+
+
+async def af_get_team_league_id(self, team_id):
+    url = "https://v3.football.api-sports.io/teams/leagues"
+    params = {"team": team_id}
+    async with self.session.get(url, headers=AF_Headers, params=params) as response:
+        if response.status in (204, 499, 500):
+            return []
+        data = await response.json()
+        return data.get("response", [])
 
 
 # async def main():

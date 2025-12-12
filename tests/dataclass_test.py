@@ -105,7 +105,10 @@ def test_team_from_api_json():
         "strFacebook": "www.facebook.com/Arsenal",
         "strTwitter": "twitter.com/arsenal",
         "strInstagram": "instagram.com/arsenal",
-        "strDescriptionEN": "Arsenal Football Club is a professional football club based in Islington, London, England, that plays in the Premier League...",
+        "strDescriptionEN": (
+            "Arsenal Football Club is a professional football club based in Islington, "
+            "London, England, that plays in the Premier League..."
+        ),
         "strColour1": "#EF0107",
         "strColour2": "#fbffff",
         "strColour3": "#013373",

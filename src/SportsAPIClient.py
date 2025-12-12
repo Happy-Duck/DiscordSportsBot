@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import time
 import json
-from .DataClass import Player, Team # pyright: ignore
+from .DataClass import Player, Team  # pyright: ignore
 import os
 from dotenv import load_dotenv
 
@@ -19,11 +19,7 @@ API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 
 AF_Headers = {
     'x-apisports-key': API_FOOTBALL_KEY
-    }
-
-AF_Headers = {
-    'x-apisports-key': API_FOOTBALL_KEY
-    }
+}
 
 SPORTS_DB_KEY = "3"
 
@@ -89,78 +85,71 @@ class SportsAPIClient:
                 team_info.append(Team().from_api_json(potential_team))
 
         return team_info
-    
-    async def AF_get_player_profile(self, player):
-        URL = "https://v3.football.api-sports.io/players/profiles"
+
+    async def af_get_player_profile(self, player):
+        url = "https://v3.football.api-sports.io/players/profiles"
         params = {
             "search": player,
-            }
-        
-        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
-            if (response.status == 204):
+        }
+
+        async with self.session.get(url, headers=AF_Headers, params=params) as response:
+            if response.status == 204:
                 return ""
-            elif (response.status == 499 or response.status == 500):
+            elif response.status == 499 or response.status == 500:
                 return response.status
-            
+
             player_list = await response.json()
-            
+
         return player_list['response']
 
-    async def AF_get_player_teams(self, player_id):
+    async def af_get_player_teams(self, player_id):
         # if (response.errors !=):
         #     return "server is currently down"
-        URL = "https://v3.football.api-sports.io/players/teams"
+        url = "https://v3.football.api-sports.io/players/teams"
         params = {
             "player": player_id,
-            }
-        
-        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
-            if (response.status == 204):
-                return ""
-            elif (response.status == 499 or response.status == 500):
-                return response.status
-            
-            player_list = await response.json()
-            
-        return player_list['response']
-        
-    
-    # async def AF_Get_League_ID(self, player_id):
-        
+        }
 
-    async def AF_get_player_stat(self, id, team, league, season, name):
+        async with self.session.get(url, headers=AF_Headers, params=params) as response:
+            if response.status == 204:
+                return ""
+            elif response.status == 499 or response.status == 500:
+                return response.status
+
+            player_list = await response.json()
+
+        return player_list['response']
+
+    # async def AF_Get_League_ID(self, player_id):
+
+    async def af_get_player_stat(self, id, team, league, season, name):
         # default latest season
         # if (response.errors !=):
         #     return "server is currently down"
-        URL = "https://v3.football.api-sports.io/players/profiles"
+        url = "https://v3.football.api-sports.io/players/profiles"
         params = {
             "id": id,
             "team": team,
             "league": league,
             "season": season,
             "search": name
-            }
-        
-        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
-            if (response.status == 204):
+        }
+
+        async with self.session.get(url, headers=AF_Headers, params=params) as response:
+            if response.status == 204:
                 return ""
-            elif (response.status == 499 or response.status == 499):
+            elif response.status == 499 or response.status == 499:
                 return response.status
-            
+
             player_list = await response.json()
-            
+
         return player_list['response']
-        
-    
+
     # async def AF_get_team(self, team_name):
     #     # latest season you can get from APIFootball
     #     season = 2023
-        
-        
+
     #     return ""
-        
-
-
 
 # for testing for now
 # async def main():
@@ -172,17 +161,17 @@ class SportsAPIClient:
 
 #         # player_list = await curr_session.AF_get_player_profile(test_player.split()[1])
 #         # print(player_list)
-            
+
 #         # else:
 #         # player_team_list = await curr_session.AF_get_player_teams('154')
 #         # print(player_team_list)
-        
-#         player_stats = await curr_session.AF_get_player_stat(id =154, team=26, league=, season=2023, name=)
+
+#         player_stats = await curr_session.AF_get_player_stat(
+# id =154, team=26, league=, season=2023, name=)
 #         print(player_stats)
-        
-        
+
 #         # team_info = await curr_session.AF_get_team(test_team)
-        
-#         # for future test. messi -> memberid = 154 / brazil team = 26 / 
+
+#         # for future test. messi -> memberid = 154 / brazil team = 26 /
 
 # asyncio.run(main())

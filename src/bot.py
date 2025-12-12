@@ -5,6 +5,7 @@ import os
 import discord  # pyright: ignore
 import aiohttp
 import asyncio
+import time
 from discord import app_commands  # pyright: ignore
 from dotenv import load_dotenv  # pyright: ignore
 from db_helpers import (
@@ -16,6 +17,7 @@ from db_helpers import (
 )
 from db_skeleton import init_db
 from SportsAPIClient import SportsAPIClient
+from IntegrationLayer import IntegrationLayer
 
 # Load ENV variables
 load_dotenv()
@@ -31,8 +33,6 @@ POLL_INTERVAL = 10
 MY_GUILD = discord.Object(id=1418704334941851722)
 BOT_TESTING_CHANNEL = 1428577092228091964
 
-POLL_INTERVAL = 10
-
 
 class MyClient(discord.Client):
     user: discord.ClientUser
@@ -40,8 +40,9 @@ class MyClient(discord.Client):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
-        self._poster_task: asyncio.Task
+        self._poster_task: asyncio.Task | None = None
         self._shutdown = False
+        self.http_session: aiohttp.ClientSession | None = None
 
     async def setup_hook(self):
         try:
@@ -50,9 +51,13 @@ class MyClient(discord.Client):
         except Exception as e:
             print(f"db initializaiton falied, exception: {e}")
 
+        # create a shared aiohttp session for API calls
+        self.http_session = aiohttp.ClientSession()
+
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
 
+        # start the background poster task
         self._poster_task = asyncio.create_task(self.list_subscriptions())
 
     async def close(self):
@@ -63,11 +68,16 @@ class MyClient(discord.Client):
                 await self._poster_task
             except asyncio.CancelledError:
                 pass
+
+        # close the shared HTTP session
+        if self.http_session:
+            await self.http_session.close()
+
         await super().close()
 
     async def list_subscriptions(self):
         """
-        Subscriptions, posts updates in x second interval
+        Subscriptions: polls DB+API every POLL_INTERVAL seconds and posts embeds
         """
         try:
             channel_id = int(BOT_TESTING_CHANNEL)
@@ -75,24 +85,114 @@ class MyClient(discord.Client):
             print("invalid BOT_TESTING_CHANNEL")
             return
 
+        if self.http_session is None:
+            print("HTTP session not initialized; exiting poller")
+            return
+
+        api = SportsAPIClient(self.http_session)
+
+        # in-memory cache for API results per player name
+        player_cache: dict[str, dict] = (
+            {}
+        )  # name -> {"data": player_info, "timestamp": ts}
+        CACHE_TTL = POLL_INTERVAL  # seconds
+
         while not self._shutdown:
             try:
+                # get channel object
                 channel = self.get_channel(channel_id)
                 if channel is None:
                     try:
                         channel = await self.fetch_channel(channel_id)
                     except Exception as e:
                         print(f"could not fetch channel {channel_id}: {e}")
-                        # wait and retry later
+                        await asyncio.sleep(max(5, POLL_INTERVAL))
                         continue
+
+                # fetch all subscriptions from DB
                 try:
-                    await channel.send(
-                        "Here is information about your subscriptions! DUMMY"
+                    from db_helpers import (
+                        db_all_player_subscriptions,
+                        db_all_team_subscriptions,
                     )
-                except discord.Forbidden:
-                    print(f"bot cannot send messages to channel {channel_id}")
+
+                    player_subs = await db_all_player_subscriptions()
+                    team_subs = await db_all_team_subscriptions()
+
+                    print(f"Player subscriptions: {player_subs}")
+                    print(f"Team subscriptions: {team_subs}")
+
                 except Exception as e:
-                    print(f"failed to send to channel {channel_id}: {e}")
+                    print(f"Exception fetching subscriptions: {e}")
+                    player_subs = []
+                    team_subs = []
+
+                # collect unique player names for API calls
+                player_names = list(
+                    {r["player_name"] for r in player_subs if r.get("player_name")}
+                )
+
+                # fetch API data for each player (with caching)
+                for name in player_names:
+                    now = time.time()
+                    cached = player_cache.get(name)
+                    if cached and now - cached["timestamp"] < CACHE_TTL:
+                        player_info = cached["data"]
+                    else:
+                        try:
+                            player_info = await api.get_player(name)
+                        except Exception as e:
+                            print(f"API error fetching '{name}': {e}")
+                            continue
+                        player_cache[name] = {"data": player_info, "timestamp": now}
+
+                    if player_info == "Server Down":
+                        print("Sports API appears down")
+                        continue
+                    if not player_info:
+                        print(f"No results for '{name}'")
+                        continue
+
+                    # build and send embed
+                    p = player_info[0]  # pick first match
+                    embed = discord.Embed(
+                        title=f"{getattr(p, 'name', 'Unknown')}", color=0x2ECC71
+                    )
+                    header = []
+                    pid = getattr(p, "id", None)
+                    if pid:
+                        header.append(f"ID: `{pid}`")
+                    header.append(f"Team: {getattr(p, 'team', 'N/A')}")
+                    header.append(f"Position: {getattr(p, 'position', 'N/A')}")
+                    embed.add_field(
+                        name="Summary", value=" • ".join(header), inline=False
+                    )
+                    if getattr(p, "nationality", None):
+                        embed.add_field(
+                            name="Nationality",
+                            value=getattr(p, "nationality"),
+                            inline=True,
+                        )
+                    if getattr(p, "age", None):
+                        embed.add_field(
+                            name="Age", value=str(getattr(p, "age")), inline=True
+                        )
+                    stats = getattr(p, "stats", None)
+                    if stats:
+                        embed.add_field(
+                            name="Stats", value=str(stats)[:500], inline=False
+                        )
+
+                    try:
+                        await channel.send(embed=embed)
+                        print(f"Posted update for {name} to channel {channel_id}")
+                    except discord.Forbidden:
+                        print(f"Forbidden to send to channel {channel_id}")
+                        break
+                    except Exception as e:
+                        print(f"Failed to send embed for {name}: {e}")
+
+                # have to add team polling as well
 
                 # wait for next interval
                 await asyncio.sleep(POLL_INTERVAL)
@@ -102,6 +202,7 @@ class MyClient(discord.Client):
                 break
             except Exception as e:
                 print(f"unhandled error in background poster: {e}")
+                await asyncio.sleep(5)
 
 
 # Set up Discord bot with message content intent enabled
@@ -136,10 +237,24 @@ async def on_message(message):
 
 # On demand stats request
 @client.tree.command()
-@app_commands.describe(full_name="The full name of the player you want the stats of")
-async def stats(interaction: discord.Interaction, full_name: str):
-    """Current season statistics for a specific soccer player"""
+@app_commands.describe(
+    full_name="The full name of the player you want the stats of",
+    season="Optional season (YYYY)",
+)
+async def stats(
+    interaction: discord.Interaction, full_name: str, season: int | None = None
+):
+    """Current season statistics for a specific soccer player (uses APIFootball when available)."""
     await interaction.response.defer(thinking=True)
+
+    name_parts = full_name.strip().split()
+    if len(name_parts) == 0:
+        await interaction.followup.send("Please provide a player name.")
+        return
+
+    # cant go past 2023
+    if season is None or season > 2023:
+        season = 2023
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -147,20 +262,35 @@ async def stats(interaction: discord.Interaction, full_name: str):
             player_info = await api.get_player(full_name)
 
         if player_info == "Server Down":
-            await interaction.followup.send("The server is currently down")
+            await interaction.followup.send("The sports API server appears to be down")
             return
         if not player_info:
             await interaction.followup.send(f"No player found for '{full_name}'.")
             return
 
         p = player_info[0]
-        await interaction.followup.send(
-            f"""Here are the current stats of {p.name}:\nTeam: {p.team}\n"""
-            f"""Position: {p.position}\nNationality: {p.nationality}"""  # \nStats: {p.stats}"""
-        )
+        embed = discord.Embed(title=f"{getattr(p, 'name', full_name)}", color=0x2ECC71)
+        header = []
+        pid = getattr(p, "id", None)
+        if pid:
+            header.append(f"ID: `{pid}`")
+        header.append(f"Team: {getattr(p, 'team', 'N/A')}")
+        header.append(f"Position: {getattr(p, 'position', 'N/A')}")
+        embed.add_field(name="Summary", value=" • ".join(header), inline=False)
+        if getattr(p, "nationality", None):
+            embed.add_field(
+                name="Nationality", value=getattr(p, "nationality"), inline=True
+            )
+        if getattr(p, "age", None):
+            embed.add_field(name="Age", value=str(getattr(p, "age")), inline=True)
+        stats = getattr(p, "stats", None)
+        if stats:
+            embed.add_field(name="Stats", value=str(stats)[:500], inline=False)
+
+        await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send(f"An error occurred: {e}")
+        await interaction.followup.send(f"An error occurred while fetching stats: {e}")
 
 
 # subscribe player command

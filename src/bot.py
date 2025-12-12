@@ -77,7 +77,7 @@ class MyClient(discord.Client):
 
     async def list_subscriptions(self):
         """
-        Subscriptions: polls DB+API every POLL_INTERVAL seconds and posts embeds
+        Polls DB+API every POLL_INTERVAL seconds and posts embeds for both players and teams
         """
         try:
             channel_id = int(BOT_TESTING_CHANNEL)
@@ -91,15 +91,18 @@ class MyClient(discord.Client):
 
         api = SportsAPIClient(self.http_session)
 
-        # in-memory cache for API results per player name
+        # in-memory caches
         player_cache: dict[str, dict] = (
             {}
         )  # name -> {"data": player_info, "timestamp": ts}
-        CACHE_TTL = POLL_INTERVAL  # seconds
+        team_cache: dict[str, dict] = (
+            {}
+        )  # team_name -> {"data": team_info, "timestamp": ts}
+        CACHE_TTL = POLL_INTERVAL
 
         while not self._shutdown:
             try:
-                # get channel object
+                # fetch channel object
                 channel = self.get_channel(channel_id)
                 if channel is None:
                     try:
@@ -109,7 +112,7 @@ class MyClient(discord.Client):
                         await asyncio.sleep(max(5, POLL_INTERVAL))
                         continue
 
-                # fetch all subscriptions from DB
+                # fetch subscriptions
                 try:
                     from db_helpers import (
                         db_all_player_subscriptions,
@@ -127,12 +130,12 @@ class MyClient(discord.Client):
                     player_subs = []
                     team_subs = []
 
-                # collect unique player names for API calls
+                # ------------------------
+                # POST PLAYER UPDATES
+                # ------------------------
                 player_names = list(
                     {r["player_name"] for r in player_subs if r.get("player_name")}
                 )
-
-                # fetch API data for each player (with caching)
                 for name in player_names:
                     now = time.time()
                     cached = player_cache.get(name)
@@ -146,24 +149,21 @@ class MyClient(discord.Client):
                             continue
                         player_cache[name] = {"data": player_info, "timestamp": now}
 
-                    if player_info == "Server Down":
-                        print("Sports API appears down")
+                    if player_info in [None, "Server Down"]:
                         continue
                     if not player_info:
                         print(f"No results for '{name}'")
                         continue
 
-                    # build and send embed
-                    p = player_info[0]  # pick first match
+                    p = player_info[0]
                     embed = discord.Embed(
                         title=f"{getattr(p, 'name', 'Unknown')}", color=0x2ECC71
                     )
-                    header = []
-                    pid = getattr(p, "id", None)
-                    if pid:
-                        header.append(f"ID: `{pid}`")
-                    header.append(f"Team: {getattr(p, 'team', 'N/A')}")
-                    header.append(f"Position: {getattr(p, 'position', 'N/A')}")
+                    header = [
+                        f"ID: `{getattr(p, 'id', 'N/A')}`",
+                        f"Team: {getattr(p, 'team', 'N/A')}",
+                        f"Position: {getattr(p, 'position', 'N/A')}",
+                    ]
                     embed.add_field(
                         name="Summary", value=" • ".join(header), inline=False
                     )
@@ -192,9 +192,64 @@ class MyClient(discord.Client):
                     except Exception as e:
                         print(f"Failed to send embed for {name}: {e}")
 
-                # have to add team polling as well
+                # ------------------------
+                # POST TEAM UPDATES
+                # ------------------------
+                team_names = list(
+                    {r["team_name"] for r in team_subs if r.get("team_name")}
+                )
+                for name in team_names:
+                    now = time.time()
+                    cached = team_cache.get(name)
+                    if cached and now - cached["timestamp"] < CACHE_TTL:
+                        team_info = cached["data"]
+                    else:
+                        try:
+                            team_info = await api.get_team(name)
+                        except Exception as e:
+                            print(f"API error fetching team '{name}': {e}")
+                            continue
+                        team_cache[name] = {"data": team_info, "timestamp": now}
 
-                # wait for next interval
+                    if team_info in [None, "Server Down"]:
+                        continue
+                    if not team_info:
+                        print(f"No results for team '{name}'")
+                        continue
+
+                    t = team_info[0]
+                    embed = discord.Embed(
+                        title=f"{getattr(t, 'name', 'Unknown')}", color=0x3498DB
+                    )
+                    header = [
+                        f"ID: `{getattr(t, 'id', 'N/A')}`",
+                        f"League: {getattr(t, 'league', 'N/A')}",
+                        f"Country: {getattr(t, 'country', 'N/A')}",
+                    ]
+                    embed.add_field(
+                        name="Summary", value=" • ".join(header), inline=False
+                    )
+                    if getattr(t, "stadium", None):
+                        embed.add_field(
+                            name="Stadium", value=getattr(t, "stadium"), inline=True
+                        )
+                    if getattr(t, "founded", None):
+                        embed.add_field(
+                            name="Founded",
+                            value=str(getattr(t, "founded")),
+                            inline=True,
+                        )
+
+                    try:
+                        await channel.send(embed=embed)
+                        print(f"Posted update for team {name} to channel {channel_id}")
+                    except discord.Forbidden:
+                        print(f"Forbidden to send to channel {channel_id}")
+                        break
+                    except Exception as e:
+                        print(f"Failed to send embed for team {name}: {e}")
+
+                # wait until next interval
                 await asyncio.sleep(POLL_INTERVAL)
 
             except asyncio.CancelledError:

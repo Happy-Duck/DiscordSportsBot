@@ -172,6 +172,8 @@ async def subscribe_player(interaction: discord.Interaction, full_name: str):
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
         player_name=full_name,
+        channel_id=str(interaction.channel_id),
+        guild_id=str(interaction.guild_id)
     )
     await interaction.response.send_message(message)
 
@@ -185,6 +187,8 @@ async def subscribe_team(interaction: discord.Interaction, full_name: str):
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
         team_name=full_name,
+        channel_id=str(interaction.channel_id),
+        guild_id=str(interaction.guild_id)
     )
     await interaction.response.send_message(message)
 
@@ -228,14 +232,19 @@ async def subscriptions(interaction: discord.Interaction):
     subs = await db_subscriptions(discord_id)
     players = subs["players"]
     teams = subs["teams"]
+    channel_id = subs["channel_id"]
+    guild_id = subs["guild_id"]
 
     player_text = "\n".join(f"- {p}" for p in players) if players else "None"
     team_text = "\n".join(f"- {t}" for t in teams) if teams else "None"
+    channel_line = f"Updates will be posted in <#{channel_id}>\n" if channel_id else ""
+    guild_line = f"Guild ID: {guild_id}\n" if guild_id else ""
 
     await interaction.response.send_message(
         f"""Hi {interaction.user.display_name}!
         Players you're subscribed to:\n{player_text}
-        Teams you're subscribed to:\n{team_text}"""
+        Teams you're subscribed to:\n{team_text}
+        {channel_line}{guild_line}"""
     )
 
 

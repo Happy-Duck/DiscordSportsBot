@@ -1,7 +1,6 @@
 # bot.py
 # The main bot script
 
-# We definitely need these at the very least
 import os
 import discord  # pyright: ignore
 import aiohttp
@@ -31,6 +30,9 @@ POLL_INTERVAL = 10
 # supposedly helps speed up testing?
 MY_GUILD = discord.Object(id=1418704334941851722)
 BOT_TESTING_CHANNEL = 1428577092228091964
+
+BOT_TESTING_CHANNEL = 1428577092228091964
+POLL_INTERVAL = 10
 
 
 class MyClient(discord.Client):
@@ -94,7 +96,7 @@ class MyClient(discord.Client):
                     print(f"failed to send to channel {channel_id}: {e}")
 
                 # wait for next interval
-                await asyncio.sleep(60)  # polling interval
+                await asyncio.sleep(POLL_INTERVAL)
 
             except asyncio.CancelledError:
                 print("background poster cancelled")

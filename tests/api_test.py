@@ -204,7 +204,7 @@ async def test_get_player_stats():
 
 
 @pytest.mark.asyncio
-async def test_get_player_stats():
+async def test_get_exact_team():
     async with aiohttp.ClientSession() as session:
         client = IntegrationLayer(session)
         potential_team = [

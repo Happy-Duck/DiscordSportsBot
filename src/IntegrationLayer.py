@@ -18,8 +18,6 @@ class IntegrationLayer:
         last_name = last_name.lower()
 
         trickled_list = []
-        first_names = []
-
         # Then do exact search to see if the desired name is present
         for player in list_of_potential_player:
             if (
@@ -125,7 +123,7 @@ class IntegrationLayer:
             if league["league"]["type"] == "League":
                 league_id = league["league"]["id"]
                 break
-        if league_id == None:
+        if league_id is None:
             return {
                 "status": f"The team have a regular league in {season} season",
                 "data": None,

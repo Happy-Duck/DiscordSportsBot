@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import json
 import os
-from .DataClass import Player, Team # pyright: ignore
+from .DataClass import Player, Team  # pyright: ignore
 from dotenv import load_dotenv
 import unicodedata
 
@@ -28,7 +28,6 @@ API_FOOTBALL_End_Point = "v3.football.api-sports.io"
 
 # The class SportsAPIClient will be responsible for giving back the player info.
 class SportsAPIClient:
-
     # Maintain a single session per server to avoid creating many sessions
     def __init__(self, session):
         self.session = session
@@ -38,7 +37,6 @@ class SportsAPIClient:
         async with self.session.get(
             f"{SPORTS_DB_URL}/searchplayers.php?p={player}"
         ) as response:
-
             if not response:
                 return "Server Down"
 
@@ -64,7 +62,6 @@ class SportsAPIClient:
         async with self.session.get(
             f"{SPORTS_DB_URL}/searchteams.php?t={team}"
         ) as response:
-
             # kinda wacky not the try/catch.. but... works
             if 200 > response.status or response.status >= 300:
                 return "Server Down"
@@ -96,8 +93,7 @@ class SportsAPIClient:
                 return {"status": "server down", "data": None}
 
             player_list = await response.json()
-        return {"status": "success",  "data": player_list['response']} 
-
+        return {"status": "success", "data": player_list["response"]}
 
     async def af_get_player_stat(self, id, season=2023):
         url = "https://v3.football.api-sports.io/players"
@@ -113,8 +109,7 @@ class SportsAPIClient:
                 return {"status": "server down", "data": None}
 
             player_stat = await response.json()
-        return {"status": "success",  "data": player_stat['response']}
-
+        return {"status": "success", "data": player_stat["response"]}
 
     async def AF_get_team_profile(self, team_name):
         URL = "https://v3.football.api-sports.io/teams"
@@ -122,14 +117,13 @@ class SportsAPIClient:
         params = {
             "name": team_name,
         }
-        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
-            if (response.status == 204):
+        async with self.session.get(URL, headers=AF_Headers, params=params) as response:
+            if response.status == 204:
                 return {"status": "team profile not found", "data": None}
-            elif (response.status == 499 or response.status == 500):
+            elif response.status == 499 or response.status == 500:
                 return {"status": "server down", "data": None}
             team_profile = await response.json()
-        return {"status": "success",  "data": team_profile['response']}
-
+        return {"status": "success", "data": team_profile["response"]}
 
     async def AF_get_team_league_id(self, team_id, season=2023):
         URL = "https://v3.football.api-sports.io/leagues"
@@ -139,13 +133,13 @@ class SportsAPIClient:
             "team": team_id,
         }
 
-        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
-            if (response.status == 204):
+        async with self.session.get(URL, headers=AF_Headers, params=params) as response:
+            if response.status == 204:
                 return {"status": "team league not found", "data": None}
-            elif (response.status == 499 or response.status == 500):
+            elif response.status == 499 or response.status == 500:
                 return {"status": "server down", "data": None}
             team_league_list = await response.json()
-        return {"status": "success",  "data": team_league_list['response']}
+        return {"status": "success", "data": team_league_list["response"]}
 
     async def AF_get_team_stat(self, team_id, league_id, season=2023):
         URL = "https://v3.football.api-sports.io/teams/statistics"
@@ -154,10 +148,10 @@ class SportsAPIClient:
             "season": season,
             "team": team_id,
         }
-        async with self.session.get(URL, headers = AF_Headers, params=params) as response:
-            if (response.status == 204):
+        async with self.session.get(URL, headers=AF_Headers, params=params) as response:
+            if response.status == 204:
                 return {"status": "team stat not found", "data": None}
-            elif (response.status == 499 or response.status == 500):
+            elif response.status == 499 or response.status == 500:
                 return {"status": "server down", "data": None}
             team_statistics = await response.json()
-        return {"status": "success",  "data": team_statistics['response']}
+        return {"status": "success", "data": team_statistics["response"]}

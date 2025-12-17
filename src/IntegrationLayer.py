@@ -120,7 +120,7 @@ class IntegrationLayer:
         # find league id with type="league"
         league_id = None
         for league in league_info["data"]:
-            if league["league"]["type"] == "League":
+            if league["league"]["type"].strip().lower() == "league":
                 league_id = league["league"]["id"]
                 break
         if league_id is None:

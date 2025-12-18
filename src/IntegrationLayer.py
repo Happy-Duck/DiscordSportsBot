@@ -1,5 +1,5 @@
 # integrationLayer.py
-from .SportsAPIClient import SportsAPIClient
+from SportsAPIClient import SportsAPIClient
 import aiohttp
 import asyncio
 import unicodedata
@@ -21,8 +21,7 @@ class IntegrationLayer:
         # Then do exact search to see if the desired name is present
         for player in list_of_potential_player:
             if (
-                player["player"]["firstname"] is None
-                or player["player"]["lastname"] is None
+                player["player"]["firstname"] is None or player["player"]["lastname"] is None
             ):
                 continue
             # normalize first and last name first
@@ -34,8 +33,7 @@ class IntegrationLayer:
             ).lower()
 
             if (
-                first_name in normalized_first_name
-                and last_name in normalized_last_name
+                first_name in normalized_first_name and last_name in normalized_last_name
             ):
                 trickled_list.append(player)
         return trickled_list
@@ -50,7 +48,7 @@ class IntegrationLayer:
         best_match = await self.string_match_algorithm(
             list_of_potential_player, first_name=first_name, last_name=last_name
         )
-        
+
         if len(best_match) == 1:
             return {"status": "success", "data": best_match}
         else:
@@ -59,7 +57,8 @@ class IntegrationLayer:
                 first_names.append(player["player"]["firstname"])
             list_of_players = ", ".join(first_names)
             return {
-                "status": f"{len(best_match)} players with first name exists including: {list_of_players}",
+                "status": f"{len(best_match)} players with first \
+                name exists including: {list_of_players}",
                 "data": None,
             }
 
@@ -128,7 +127,7 @@ class IntegrationLayer:
                 "status": f"The team have a regular league in {season} season",
                 "data": None,
             }
-        
+
         # get stat based on teamID and leagueID
         team_stat = await self.sports_api_client.AF_get_team_stat(
             team_id=team_id, league_id=league_id, season=season

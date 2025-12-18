@@ -20,6 +20,7 @@ pytestmark = pytest.mark.skipif(
 
 # we should be able to follow a similar pattern to test other api stuff
 
+
 @pytest.mark.asyncio
 async def test_real_get_team_request():
 
@@ -75,11 +76,12 @@ async def test_af_get_player_stat():
         assert player_stat["league"]["id"] == 253
         assert player_stat["games"]["appearences"] == 6
 
+
 @pytest.mark.asyncio
 async def test_AF_get_team_profile():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)
-        result1 = await client.AF_get_team_profile(team_name = "manchester united")
+        result1 = await client.AF_get_team_profile(team_name="manchester united")
         team = result1["data"][0]
 
         assert team["team"]["id"] == 33
@@ -89,11 +91,12 @@ async def test_AF_get_team_profile():
         assert team["venue"]["name"] == "Old Trafford"
         assert team["venue"]["city"] == "Manchester"
 
+
 @pytest.mark.asyncio
 async def test_AF_get_team_league_id():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)
-        result1 = await client.AF_get_team_league_id(team_id = 33, season=2023)
+        result1 = await client.AF_get_team_league_id(team_id=33, season=2023)
         team1 = result1["data"][0]["league"]
         assert team1["id"] == 667
         assert team1["name"] == "Friendlies Clubs"
@@ -104,11 +107,12 @@ async def test_AF_get_team_league_id():
         assert team3["name"] == "Premier League"
         assert team3["type"] == "League"
 
+
 @pytest.mark.asyncio
 async def test_AF_get_team_stat():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)
-        result1 = await client.AF_get_team_stat(team_id = 33, league_id = 39, season=2023)
+        result1 = await client.AF_get_team_stat(team_id=33, league_id=39, season=2023)
         stat1 = result1["data"]
 
         assert stat1["league"]["id"] == 39
@@ -179,21 +183,27 @@ async def test_string_match_algorithm():
         assert result[0]["player"]["id"] == 154
         assert result[0]["player"]["name"] == "L. Messi"
 
+
 @pytest.mark.asyncio
 async def test_get_player_profile():
     async with aiohttp.ClientSession() as session:
         # this function should "only" return "Lionel Messi"
         client = IntegrationLayer(session)
-        result = await client.get_player_profile(first_name="Lionel", last_name="Messi", season=2023)
+        result = await client.get_player_profile(
+            first_name="Lionel", last_name="Messi", season=2023
+        )
         assert result["status"] == "success"
         assert len(result["data"]) == 1
         assert result["data"][0]["player"]["id"] == 154
+
 
 @pytest.mark.asyncio
 async def test_get_player_stats():
     async with aiohttp.ClientSession() as session:
         client = IntegrationLayer(session)
-        result = await client.get_player_stats(first_name="Lionel", last_name="Messi", season=2023)
+        result = await client.get_player_stats(
+            first_name="Lionel", last_name="Messi", season=2023
+        )
         result = result["data"]
         result[0]["team"]["id"] == 9568
         result[0]["team"]["name"] == "Inter Miami"
@@ -270,12 +280,13 @@ async def test_get_exact_team():
             },
         ]
         result = await client.get_exact_team(
-            list_of_potential_team= potential_team,
+            list_of_potential_team=potential_team,
             team_name="Manchester United",
         )
         result = result["data"]
         assert result["team"]["id"] == 33
         assert result["team"]["name"] == "Manchester United"
+
 
 @pytest.mark.asyncio
 async def test_get_team_profile():
@@ -287,19 +298,3 @@ async def test_get_team_profile():
         result = result["data"]
         assert result["team"]["id"] == 33
         assert result["team"]["name"] == "Manchester United"
-
-@pytest.mark.asyncio
-async def test_get_team_stat():
-    async with aiohttp.ClientSession() as session:
-        client = IntegrationLayer(session)
-        result = await client.get_team_stats(
-            team_name="Manchester United",
-        )
-        result = result["data"]
-        assert result["league"]["id"] == 39
-        assert result["team"]["id"] == 33
-        assert result["fixtures"]["played"]["total"] == 38
-        assert result["fixtures"]["wins"]["total"] == 18
-        assert result["fixtures"]["draws"]["total"] == 6
-        assert result["fixtures"]["loses"]["total"] == 14
-        

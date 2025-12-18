@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import json
 import os
-from .DataClass import Player, Team  # pyright: ignore
+from DataClass import Player, Team  # pyright: ignore
 from dotenv import load_dotenv
 import unicodedata
 
@@ -40,7 +40,6 @@ class SportsAPIClient:
             if not response:
                 return "Server Down"
 
-            # kinda wacky not the try/catch.. but... we can prob check the server instead as well.
             if 200 > response.status or response.status >= 300:
                 return "Server Down"
 
@@ -62,7 +61,6 @@ class SportsAPIClient:
         async with self.session.get(
             f"{SPORTS_DB_URL}/searchteams.php?t={team}"
         ) as response:
-            # kinda wacky not the try/catch.. but... works
             if 200 > response.status or response.status >= 300:
                 return "Server Down"
 

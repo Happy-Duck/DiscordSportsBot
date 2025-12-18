@@ -28,7 +28,7 @@ if not TOKEN:
     )
 
 # changed
-POLL_INTERVAL = 1000000
+POLL_INTERVAL = 10
 
 # supposedly helps speed up testing?
 MY_GUILD = discord.Object(id=1418704334941851722)
@@ -325,34 +325,37 @@ async def stats(
         if response["status"] != "success":
             await interaction.followup.send(response["status"])
             return
-        # embed = discord.Embed(title=f"{getattr(p, 'name', full_name)}", color=0x2ECC71)
-        # header = []
-        # pid = getattr(p, "id", None)
-        # if pid:
-        #     header.append(f"ID: `{pid}`")
-        # header.append(f"Team: {getattr(p, 'team', 'N/A')}")
-        # header.append(f"Position: {getattr(p, 'position', 'N/A')}")
-        # embed.add_field(name="Summary", value=" • ".join(header), inline=False)
-        # if getattr(p, "nationality", None):
-        #     embed.add_field(
-        #         name="Nationality", value=getattr(p, "nationality"), inline=True
-        #     )
-        # if getattr(p, "age", None):
-        #     embed.add_field(name="Age", value=str(getattr(p, "age")), inline=True)
-        # stats = getattr(p, "stats", None)
-        # if stats:
-        #     embed.add_field(name="Stats", value=str(stats)[:500], inline=False)
-
-        # await interaction.followup.send(embed=embed)
-        player_stat = response["data"]
-        id = player_stat[0]["team"]["id"]
-        team_name = player_stat[0]["team"]["name"]
-        league_id = player_stat[0]["league"]["id"]
-        league_name = player_stat[0]["league"]["name"]
-        appearance = player_stat[0]["games"]["appearences"]
-        total_shots = player_stat[0]["shots"]["total"]
         
-        await interaction.followup.send(f"removed formatting due to debuging purpose. id = {id}, team_name = {team_name}, league_id = {league_id}, league_name = {league_name}, appearance={appearance}, total_shots={total_shots} ")
+        # player information to display
+        player_stat = response["data"][0]
+        team_name = player_stat["team"].get("name", "N/A")
+        league_name = player_stat["league"].get("name", "N/A")
+        games_played = player_stat["games"].get("appearences", "N/A")
+        position = player_stat["games"].get("position", "N/A")
+        passes = player_stat["passes"].get("total", "N/A")
+        shots =player_stat["shots"].get("total", "N/A")
+        goals = player_stat["goals"].get("total", "N/A")
+
+
+        embed = discord.Embed(title=f"Season {season}: {first_name} {last_name}", color=0x2ECC71)
+        
+        embed.add_field(
+            name="League / Team",
+            value=f"League: {league_name}\nTeam: {team_name}",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Games / Position",
+            value=f"Games Played: {games_played}\nPosition: {position}",
+            inline=False
+        )
+        
+        embed.add_field(name="Passes", value=passes, inline=True)
+        embed.add_field(name="Shots", value=shots, inline=True)
+        embed.add_field(name="Goals", value=goals, inline=True)
+        
+        await interaction.followup.send(embed=embed)
 
     except Exception as e:
         await interaction.followup.send(f"An error occurred while fetching stats: {e}")

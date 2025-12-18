@@ -8,6 +8,8 @@ Key Features:
 - **Statistics Retrieval**: Fetch current stats for players and teams on command.
 - **Notifications**: Automated updates based on subscriptions.
 
+[View Project Proposal](https://docs.google.com/document/d/1j0bAS2HjeMlY9QebZ3tDX2xjbtOkhRvqG1ifpu8Gssg/edit?tab=t.0)
+
 ## Technical Architecture
 The application is built using specific layers to ensure modularity and maintainability:
 

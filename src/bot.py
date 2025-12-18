@@ -27,6 +27,7 @@ if not TOKEN:
         "DISCORD_TOKEN not found. Go to .env and set DISCORD_TOKEN locally."
     )
 
+# changed
 POLL_INTERVAL = 10
 
 # supposedly helps speed up testing?
@@ -43,6 +44,7 @@ class MyClient(discord.Client):
         self._poster_task: asyncio.Task | None = None
         self._shutdown = False
         self.http_session: aiohttp.ClientSession | None = None
+        self.integration_layer: IntegrationLayer | None = None
 
     async def setup_hook(self):
         try:
@@ -51,8 +53,10 @@ class MyClient(discord.Client):
         except Exception as e:
             print(f"db initializaiton falied, exception: {e}")
 
-        # create a shared aiohttp session for API calls
+        # create a shared aiohttp session for API calls and IntegrationLayer
         self.http_session = aiohttp.ClientSession()
+        self.integration_layer = IntegrationLayer(self.http_session)
+        
 
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
@@ -294,55 +298,63 @@ async def on_message(message):
 # On demand stats request
 @client.tree.command()
 @app_commands.describe(
-    full_name="The full name of the player you want the stats of",
+    first_name="First name of the player you want the stats of",
+    last_name="Last name of the player you want the stats of",
     season="Optional season (YYYY)",
 )
 async def stats(
-    interaction: discord.Interaction, full_name: str, season: int | None = None
+    interaction: discord.Interaction, first_name: str, last_name: str, season: int | None = None
 ):
     """Current season statistics for a specific soccer player (uses APIFootball when available)."""
     await interaction.response.defer(thinking=True)
 
-    name_parts = full_name.strip().split()
-    if len(name_parts) == 0:
-        await interaction.followup.send("Please provide a player name.")
+    if len(first_name) == 0 or len(last_name) == 0:
+        await interaction.followup.send("Please provide both player's first and last name.")
         return
 
-    # cant go past 2023
-    if season is None or season > 2023:
+    # cant go past 2023 or before 2021
+    if season is None or season > 2023 or season < 2021:
         season = 2023
 
+    integration_layer = client.integration_layer
+    if integration_layer is None:
+        await interaction.followup.send("The Integration Layer was never initialized")
+        return 
     try:
-        async with aiohttp.ClientSession() as session:
-            api = SportsAPIClient(session)
-            player_info = await api.get_player(full_name)
-
-        if player_info == "Server Down":
-            await interaction.followup.send("The sports API server appears to be down")
+        response = await integration_layer.get_player_stats(first_name=first_name, last_name=last_name, season=season)
+        if response["status"] != "success":
+            await interaction.followup.send(response["status"])
             return
-        if not player_info:
-            await interaction.followup.send(f"No player found for '{full_name}'.")
-            return
+        
+        # player information to display
+        player_stat = response["data"][0]
+        team_name = player_stat["team"].get("name", "N/A")
+        league_name = player_stat["league"].get("name", "N/A")
+        games_played = player_stat["games"].get("appearences", "N/A")
+        position = player_stat["games"].get("position", "N/A")
+        passes = player_stat["passes"].get("total", "N/A")
+        shots =player_stat["shots"].get("total", "N/A")
+        goals = player_stat["goals"].get("total", "N/A")
 
-        p = player_info[0]
-        embed = discord.Embed(title=f"{getattr(p, 'name', full_name)}", color=0x2ECC71)
-        header = []
-        pid = getattr(p, "id", None)
-        if pid:
-            header.append(f"ID: `{pid}`")
-        header.append(f"Team: {getattr(p, 'team', 'N/A')}")
-        header.append(f"Position: {getattr(p, 'position', 'N/A')}")
-        embed.add_field(name="Summary", value=" • ".join(header), inline=False)
-        if getattr(p, "nationality", None):
-            embed.add_field(
-                name="Nationality", value=getattr(p, "nationality"), inline=True
-            )
-        if getattr(p, "age", None):
-            embed.add_field(name="Age", value=str(getattr(p, "age")), inline=True)
-        stats = getattr(p, "stats", None)
-        if stats:
-            embed.add_field(name="Stats", value=str(stats)[:500], inline=False)
 
+        embed = discord.Embed(title=f"Season {season}: {first_name} {last_name}", color=0x2ECC71)
+        
+        embed.add_field(
+            name="League / Team",
+            value=f"League: {league_name}\nTeam: {team_name}",
+            inline=False
+        )
+
+        embed.add_field(
+            name="Games / Position",
+            value=f"Games Played: {games_played}\nPosition: {position}",
+            inline=False
+        )
+        
+        embed.add_field(name="Passes", value=passes, inline=True)
+        embed.add_field(name="Shots", value=shots, inline=True)
+        embed.add_field(name="Goals", value=goals, inline=True)
+        
         await interaction.followup.send(embed=embed)
 
     except Exception as e:

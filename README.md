@@ -105,10 +105,7 @@ This method ensures all dependencies are isolated and correct.
 
 | Name | Role |
 |------|------|
-| [Placeholder Name 1] | [Placeholder Role] |
-| [Placeholder Name 2] | [Placeholder Role] |
-| [Placeholder Name 3] | [Placeholder Role] |
-| [Placeholder Name 4] | [Placeholder Role] |
-
----
-**Project Status**: Active Development (Fall 2025)
+| **Ayana** | API Integration & Data Handling |
+| **Rishi Garhyan** | Discord Integration |
+| **Hyunho Kim** | Discord Integration |
+| **Zeeshan Khan** | API Integration, documentation, and bug handling |

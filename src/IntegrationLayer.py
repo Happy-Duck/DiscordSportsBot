@@ -1,5 +1,5 @@
 # integrationLayer.py
-from SportsAPIClient import SportsAPIClient
+from .SportsAPIClient import SportsAPIClient
 import aiohttp
 import asyncio
 import unicodedata

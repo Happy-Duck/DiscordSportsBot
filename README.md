@@ -1,208 +1,114 @@
-# Discord Sports Bot (Team 86) · FA25
+# Discord Sports Bot (Team 86)
 
-Made for CS 222 Fall 2025 by Ayana, Hyunho Kim, Rishi Garhyan, and Zeeshan Khan
+## Introduction
+The Discord Sports Bot is a comprehensive tool designed for sports enthusiasts on Discord, created for CS 222 (Fall 2025). It allows users to subscribe to their favorite players and teams, receiving real-time updates and statistics directly in their server. The bot aims to centralize sports information, making it easy to track performance and news without leaving the Discord platform.
 
-A Discord bot that provides sports-related functionality (player/team subscriptions, stats, and notifications). This repository contains the bot code, an async SQLite schema, database initialization utilities, tests, Docker configuration, and CI configuration used by the team.
+Key Features:
+- **Player & Team Subscriptions**: Users can follow specific entities to get tailored updates.
+- **Statistics Retrieval**: Fetch current stats for players and teams on command.
+- **Notifications**: Automated updates based on subscriptions.
 
----
+## Technical Architecture
+The application is built using specific layers to ensure modularity and maintainability:
 
-## Table of contents
+1.  **Interface Layer (Discord):**
+    -   Built with **`discord.py`**, this layer handles Slash Commands (e.g., `/stats`, `/subscribe`) and user interactions.
+    -   Entry point: `src/bot.py`.
 
-- Project overview
-- How to run (local)
-- How to run (Docker)
-- Database initialization (create .db)
-- Run tests
-- Code quality rules (formatter & flake8)
-- Usage
-- Project status & known limitations
-- Environment & security
-- Contact / team
+2.  **Application Logic & Integration:**
+    -   The **Integration Layer** (`src/IntegrationLayer.py`) acts as a bridge, coordinating requests between the bot interface and the backend data services.
+    -   This separates the Discord-specific logic from the core business logic.
 
----
+3.  **Data Access & External APIs:**
+    -   **Sports Data**: `src/SportsAPIClient.py` wraps external APIs (like TheSportsDB) to fetch real-time player and team data.
+    -   **Persistence**: User subscriptions and settings are stored in a local **SQLite** database.
+    -   **ORM**: We use **`SQLAlchemy`** with **`aiosqlite`** for asynchronous database interactions (`src/database.py`, `src/db_skeleton.py`).
 
-## Project overview
+4.  **Deployment:**
+    -   The application is containerized using **Docker** to ensure a reproducible environment (`Dockerfile`, `compose.yaml`).
 
-Main pieces in this repo:
-- Bot entrypoint: `src/bot.py` — Discord commands and interaction handlers.
-- Database schema and async engine: `src/db_skeleton.py`, `src/setup_database.py`, `src/database.py`, `src/db_helpers.py`.
-- API client: `src/SportsAPIClient.py` (wraps external sports APIs).
-- Utilities & tests: `tests/database_tests.py`, `tests/api_test.py`, and other helpers.
-- Docker compose file: `compose.yaml` (service named `server`).
-- `.env` template: `RenameTo.env` (rename to `.env` and set tokens).
+## Installation Instructions
 
-Goal: let users subscribe to players/teams and receive updates; store subscriptions and stats in a local SQLite DB during development.
+### Prerequisites
+-   **Git**
+-   **Docker** (Recommended for easiest run)
+-   **Python 3.10+** (If running locally without Docker)
+-   A **Discord Bot Token** (Get one from the [Discord Developer Portal](https://discord.com/developers/applications))
+-   An **API-Football Key** (Optional, for advanced stats)
 
----
+### Method 1: Running with Docker (Recommended)
+This method ensures all dependencies are isolated and correct.
 
-## How to run — Local
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/CS222-UIUC/fa25-team86-discordsportsbot.git
+    cd fa25-team86-discordsportsbot
+    ```
 
-Requirements:
-- Python 3.10+ (use a virtual environment)
-- Git
+2.  **Configure Environment Variables**
+    - Copy the template file:
+      ```bash
+      cp RenameTo.env .env
+      ```
+    - Open `.env` and add your keys:
+      ```env
+      DISCORD_TOKEN=your_discord_bot_token_here
+      API_FOOTBALL_KEY=your_api_key_here
+      ```
 
-1. Clone repo
-   ```
-   git clone https://github.com/CS222-UIUC/fa25-team86-discordsportsbot.git
-   cd fa25-team86-discordsportsbot
-   ```
+3.  **Build and Run**
+    ```bash
+    docker compose up --build
+    ```
+    The bot should now be online in your Discord server.
 
-2. Create and activate a virtual environment
-   - macOS / Linux:
-     ```
-     python -m venv .venv
-     source .venv/bin/activate
-     ```
-   - Windows (PowerShell):
-     ```
-     python -m venv .venv
-     .\.venv\Scripts\Activate.ps1
-     ```
+### Method 2: Running Locally (Python)
 
-3. Install dependencies
-   ```
-   pip install -r requirements.txt
-   ```
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/CS222-UIUC/fa25-team86-discordsportsbot.git
+    cd fa25-team86-discordsportsbot
+    ```
 
-4. Create the local SQLite database
-   ```
-   python src/setup_database.py
-   ```
-   This creates `src/sportsbot.db` (default defined in `src/db_skeleton.py`).
+2.  **Set Up Virtual Environment**
+    -   **macOS/Linux**:
+        ```bash
+        python -m venv .venv
+        source .venv/bin/activate
+        ```
+    -   **Windows**:
+        ```powershell
+        python -m venv .venv
+        .\.venv\Scripts\Activate.ps1
+        ```
 
-5. Add environment variables
-   - Copy/rename the template:
-     ```
-     cp RenameTo.env .env
-     ```
-     Edit `.env` and set:
-     - `DISCORD_TOKEN=your_discord_bot_token`
-     - `API_FOOTBALL_KEY=your_api_key` (optional; required for some tests and future API integration)
+3.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-   Important: never commit `.env` or any tokens.
+4.  **Initialize Database**
+    ```bash
+    python src/setup_database.py
+    ```
+    This creates the local `src/sportsbot.db`.
 
-6. Run the bot locally
-   ```
-   python src/bot.py
-   ```
+5.  **Configure Environment Variables**
+    -   Create a `.env` file (copy `RenameTo.env`) and add your `DISCORD_TOKEN`.
 
-Note: For single-guild command testing, update `MY_GUILD` in `src/bot.py`.
+6.  **Run the Bot**
+    ```bash
+    python src/bot.py
+    ```
 
----
+## Group Members
 
-## How to run — Docker
-
-The repo includes `compose.yaml` (service `server`) and a Dockerfile.
-
-1. Ensure `.env` is present.
-2. Build and run:
-   ```
-   docker compose up --build
-   ```
-   To run detached:
-   ```
-   docker compose up --build -d
-   ```
-
-3. The compose file maps port `8000:8000` by default.
-
-Notes:
-- On Apple Silicon or different architectures:
-  ```
-  docker build --platform=linux/amd64 -t discord-sports-bot .
-  ```
-- If tests fail in the container due to path issues, run tests locally for debugging.
+| Name | Role |
+|------|------|
+| [Placeholder Name 1] | [Placeholder Role] |
+| [Placeholder Name 2] | [Placeholder Role] |
+| [Placeholder Name 3] | [Placeholder Role] |
+| [Placeholder Name 4] | [Placeholder Role] |
 
 ---
-
-## Database initialization
-
-- Primary initializer: `src/setup_database.py` — creates tables via `src/db_skeleton.init_db()`:
-  ```
-  python src/setup_database.py
-  ```
-- Helper functions in `src/database.py`.
-- Default DB URL in `src/db_skeleton.py`:
-  ```
-  DATABASE_URL = "sqlite+aiosqlite:///./src/sportsbot.db"
-  ```
-
----
-
-## Run tests
-
-This project uses `pytest` and `pytest-asyncio`.
-
-- Run all tests:
-  ```
-  pytest
-  ```
-- Integration tests that call external APIs (e.g., `tests/api_test.py`) are skipped unless `API_FOOTBALL_KEY` is set.
-
----
-
-## Code quality rules
-
-CI runs an auto-formatter and tests.
-
-1. Formatting
-   - Run Black:
-     ```
-     black .
-     ```
-
-2. Linting
-   - Run flake8:
-     ```
-     flake8
-     ```
-
-Suggested quick local check before PR:
-```
-black . && flake8 && pytest
-```
-
----
-
-## Usage
-
-Invite: use your bot's OAuth2 URL.
-
-**Slash Commands:**
-- `/stats [full_name]` — Fetch current season stats for a soccer player (uses TheSportsDB).
-- `/subscribe_player [full_name]` — Subscribe to player updates.
-- `/subscribe_team [full_name]` — Subscribe to team updates.
-- `/unsubscribe_player [full_name]` — Unsubscribe from a player.
-- `/unsubscribe_team [full_name]` — Unsubscribe from a team.
-- `/subscriptions` — List your active subscriptions.
-
-**Chat Triggers:**
-- "sports" — The bot responds with enthusiasm.
-- "football" — The bot attempts to correct you to "soccer".
-
----
-
-## Project status & known limitations
-
-**Current Status:**
-- Functional Discord bot with subscription management and player statistics retrieval.
-- Database: Local SQLite for storing user subscriptions.
-- API: Currently relies on `TheSportsDB` for player and team data in the active commands. `API-Football` implementation is in progress.
-
-**Known Limitations:**
-- **Data Source**: The free tier of some sports APIs has constraints. We are currently using `TheSportsDB` which works well for basic info but might have different coverage than `API-Football`.
-- **API Limits**: Rate limits apply.
-- **Disambiguation**: Use full player names for best results.
-
----
-
-## Environment variables & security
-
-Do not commit secrets.
-
-Common environment variables:
-- `DISCORD_TOKEN` — Discord bot token (required)
-- `API_FOOTBALL_KEY` — API-Football key (optional for now)
-- `DATABASE_URL` — optional override for the DB connection string
-
-Use `.env` for local development.
+**Project Status**: Active Development (Fall 2025)

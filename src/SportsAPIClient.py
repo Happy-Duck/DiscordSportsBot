@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 import json
 import os
-from DataClass import Player, Team  # pyright: ignore
+from .DataClass import Player, Team  # pyright: ignore
 from dotenv import load_dotenv
 import unicodedata
 

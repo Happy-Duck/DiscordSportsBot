@@ -71,7 +71,7 @@ class SportsAPIClient:
             # format json so only necessary information is sent and return
             team_info = []
 
-            print(team_list[0])
+            # print(team_list[0])
 
             for potential_team in team_list:
                 team_info.append(Team().from_api_json(potential_team))

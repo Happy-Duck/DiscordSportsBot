@@ -41,9 +41,11 @@ async def db_subscribe_player(
     async with SessionLocal() as session:
         member = await get_or_create_member(discord_id, username)
 
-        # look for an exact match first
+        # look for exact matches first (older data may contain duplicate
+        # rows for the same name, so never assume there is at most one)
         result = await session.execute(select(Player).where(Player.name == player_name))
-        player = result.scalar_one_or_none()
+        matching_players = result.scalars().all()
+        player = matching_players[0] if matching_players else None
 
         if not player:
             # not in DB yet -> look the player up on the external API
@@ -91,15 +93,17 @@ async def db_subscribe_player(
             session.add(player)
             await session.commit()
             await session.refresh(player)
+            matching_players = [player]
 
-        # create the subscription (or update where updates should be posted)
+        # create the subscription (or update where updates should be posted);
+        # an existing subscription may point at any row sharing this name
         result = await session.execute(
             select(PlayerSubscription).where(
                 PlayerSubscription.member_id == member.id,
-                PlayerSubscription.player_id == player.id,
+                PlayerSubscription.player_id.in_([p.id for p in matching_players]),
             )
         )
-        sub = result.scalar_one_or_none()
+        sub = result.scalars().first()
         if not sub:
             sub = PlayerSubscription(
                 member_id=member.id,
@@ -129,9 +133,10 @@ async def db_subscribe_team(
     async with SessionLocal() as session:
         member = await get_or_create_member(discord_id, username)
 
-        # try to find existing Team by exact name
+        # try to find existing Team by exact name (duplicates possible in old data)
         result = await session.execute(select(Team).where(Team.name == team_name))
-        team = result.scalar_one_or_none()
+        matching_teams = result.scalars().all()
+        team = matching_teams[0] if matching_teams else None
 
         if not team:
             # not in DB yet -> look the team up on the external API
@@ -156,15 +161,17 @@ async def db_subscribe_team(
             session.add(team)
             await session.commit()
             await session.refresh(team)
+            matching_teams = [team]
 
-        # create the subscription (or update where updates should be posted)
+        # create the subscription (or update where updates should be posted);
+        # an existing subscription may point at any row sharing this name
         result = await session.execute(
             select(TeamSubscription).where(
                 TeamSubscription.member_id == member.id,
-                TeamSubscription.team_id == team.id,
+                TeamSubscription.team_id.in_([t.id for t in matching_teams]),
             )
         )
-        sub = result.scalar_one_or_none()
+        sub = result.scalars().first()
         if not sub:
             sub = TeamSubscription(
                 member_id=member.id,
@@ -199,7 +206,9 @@ async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
                 .join(PlayerSubscription, Player.id == PlayerSubscription.player_id)
                 .where(PlayerSubscription.member_id == member.id)
             )
-            players = [p.name for p in result_players.scalars().unique().all()]
+            # dict.fromkeys dedupes names while preserving order (older data
+            # may contain duplicate rows for the same player/team name)
+            players = list(dict.fromkeys(p.name for p in result_players.scalars().unique().all()))
 
             # teams
             result_teams = await session.execute(
@@ -207,7 +216,7 @@ async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
                 .join(TeamSubscription, Team.id == TeamSubscription.team_id)
                 .where(TeamSubscription.member_id == member.id)
             )
-            teams = [t.name for t in result_teams.scalars().unique().all()]
+            teams = list(dict.fromkeys(t.name for t in result_teams.scalars().unique().all()))
 
             # pick the first explicitly-set channel/guild, preferring player subs
             channel_id = None
@@ -244,21 +253,25 @@ async def db_unsubscribe_player(discord_id: str, player_name: str):
         if not member:
             return False, "You don't have any subscriptions yet."
 
-        result = await session.execute(select(Player).where(Player.name == player_name))
-        player = result.scalar_one_or_none()
-        if not player:
-            return False, f"Player '{player_name}' not found."
-
+        # find this member's subscriptions to any player row with that name
+        # (older data may contain duplicate rows for the same name)
         result = await session.execute(
-            select(PlayerSubscription).where(
+            select(PlayerSubscription)
+            .join(Player, Player.id == PlayerSubscription.player_id)
+            .where(
                 PlayerSubscription.member_id == member.id,
-                PlayerSubscription.player_id == player.id,
+                Player.name == player_name,
             )
         )
-        sub = result.scalar_one_or_none()
-        if not sub:
+        subs = result.scalars().all()
+        if not subs:
+            result = await session.execute(select(Player.id).where(Player.name == player_name))
+            if result.first() is None:
+                return False, f"Player '{player_name}' not found."
             return False, f"You were not subscribed to '{player_name}'."
-        await session.delete(sub)
+
+        for sub in subs:
+            await session.delete(sub)
         await session.commit()
         return True, f"You have been unsubscribed from {player_name}."
 
@@ -270,22 +283,25 @@ async def db_unsubscribe_team(discord_id: str, team_name: str):
         if not member:
             return False, "You don't have any subscriptions yet."
 
-        result = await session.execute(select(Team).where(Team.name == team_name))
-        team = result.scalar_one_or_none()
-        if not team:
-            return False, f"Team '{team_name}' not found."
-
+        # find this member's subscriptions to any team row with that name
+        # (older data may contain duplicate rows for the same name)
         result = await session.execute(
-            select(TeamSubscription).where(
+            select(TeamSubscription)
+            .join(Team, Team.id == TeamSubscription.team_id)
+            .where(
                 TeamSubscription.member_id == member.id,
-                TeamSubscription.team_id == team.id,
+                Team.name == team_name,
             )
         )
-        sub = result.scalar_one_or_none()
-        if not sub:
+        subs = result.scalars().all()
+        if not subs:
+            result = await session.execute(select(Team.id).where(Team.name == team_name))
+            if result.first() is None:
+                return False, f"Team '{team_name}' not found."
             return False, f"You were not subscribed to '{team_name}'."
 
-        await session.delete(sub)
+        for sub in subs:
+            await session.delete(sub)
         await session.commit()
         return True, f"You have been unsubscribed from {team_name}."
 

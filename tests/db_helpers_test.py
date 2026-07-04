@@ -8,7 +8,8 @@ import pytest_asyncio
 
 import src.db_helpers as db_helpers
 from src.DataClass import Player as PlayerData, Team as TeamData
-from src.db_skeleton import init_db
+from src.db_skeleton import SessionLocal, init_db
+from src.db_skeleton import Player as PlayerRow, Team as TeamRow
 
 
 class FakeSportsAPIClient:
@@ -127,6 +128,42 @@ async def test_subscriptions_for_unknown_user_has_all_keys():
     assert subs["teams"] == []
     assert subs["channel_id"] is None
     assert subs["guild_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_duplicate_name_rows_do_not_crash_subscribe_or_unsubscribe():
+    # Regression test: older databases contain duplicate Player/Team rows for
+    # the same name, which crashed every command using scalar_one_or_none()
+    # with MultipleResultsFound (hit live on /unsubscribe_player).
+    async with SessionLocal() as session:
+        session.add(PlayerRow(name="Lionel Messi", position="RW"))
+        session.add(PlayerRow(name="Lionel Messi", position="RW"))
+        session.add(TeamRow(name="Real Madrid"))
+        session.add(TeamRow(name="Real Madrid"))
+        await session.commit()
+
+    ok, msg = await db_helpers.db_subscribe_player(
+        "dupe-user", "tester", "Lionel Messi", channel_id="1", guild_id="2"
+    )
+    assert ok
+
+    ok, msg = await db_helpers.db_subscribe_team(
+        "dupe-user", "tester", "Real Madrid", channel_id="1", guild_id="2"
+    )
+    assert ok
+
+    subs = await db_helpers.db_subscriptions("dupe-user")
+    assert subs["players"].count("Lionel Messi") == 1  # listed once, not twice
+    assert subs["teams"].count("Real Madrid") == 1
+
+    ok, msg = await db_helpers.db_unsubscribe_player("dupe-user", "Lionel Messi")
+    assert ok, msg
+    ok, msg = await db_helpers.db_unsubscribe_team("dupe-user", "Real Madrid")
+    assert ok, msg
+
+    subs = await db_helpers.db_subscriptions("dupe-user")
+    assert subs["players"] == []
+    assert subs["teams"] == []
 
 
 @pytest.mark.asyncio

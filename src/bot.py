@@ -1,38 +1,88 @@
 # bot.py
 # The main bot script
 
-import os
-import discord  # pyright: ignore
-import aiohttp
 import asyncio
-import time
-from discord import app_commands  # pyright: ignore
-from dotenv import load_dotenv  # pyright: ignore
-from db_helpers import (
+import os
+
+import aiohttp
+import discord
+from discord import app_commands
+from dotenv import load_dotenv
+
+from .db_helpers import (
+    db_all_player_subscriptions,
+    db_all_team_subscriptions,
     db_subscribe_player,
     db_subscribe_team,
     db_subscriptions,
     db_unsubscribe_player,
     db_unsubscribe_team,
 )
-from db_skeleton import init_db
-from SportsAPIClient import SportsAPIClient
-from IntegrationLayer import IntegrationLayer
+from .db_skeleton import init_db
+from .IntegrationLayer import IntegrationLayer
+from .SportsAPIClient import SportsAPIClient
 
 # Load ENV variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-if not TOKEN:
-    raise RuntimeError(
-        "DISCORD_TOKEN not found. Go to .env and set DISCORD_TOKEN locally."
+
+# How often (seconds) the background poster re-checks subscriptions.
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "300"))
+
+# Optional: a guild ID to sync commands to instantly during development.
+# Without it, commands are synced globally (may take up to an hour to appear).
+DEV_GUILD_ID = os.getenv("DEV_GUILD_ID")
+
+
+def _player_snapshot(p):
+    """The fields we post about — used to detect when something changed."""
+    return (
+        getattr(p, "name", None),
+        getattr(p, "team", None),
+        getattr(p, "position", None),
+        getattr(p, "nationality", None),
+        getattr(p, "age", None),
     )
 
-# changed
-POLL_INTERVAL = 30
 
-# supposedly helps speed up testing?
-MY_GUILD = discord.Object(id=1418704334941851722)
-BOT_TESTING_CHANNEL = 1428577092228091964
+def _team_snapshot(t):
+    return (
+        getattr(t, "name", None),
+        getattr(t, "league", None),
+        getattr(t, "country", None),
+        getattr(t, "stadium", None),
+        getattr(t, "founded", None),
+    )
+
+
+def _player_embed(p):
+    embed = discord.Embed(title=f"{getattr(p, 'name', None) or 'Unknown'}", color=0x2ECC71)
+    header = [
+        f"Team: {getattr(p, 'team', None) or 'N/A'}",
+        f"Position: {getattr(p, 'position', None) or 'N/A'}",
+    ]
+    embed.add_field(name="Summary", value=" • ".join(header), inline=False)
+    if getattr(p, "nationality", None):
+        embed.add_field(name="Nationality", value=p.nationality, inline=True)
+    if getattr(p, "age", None):
+        embed.add_field(name="Age", value=str(p.age), inline=True)
+    if getattr(p, "stats", None):
+        embed.add_field(name="Stats", value=str(p.stats)[:500], inline=False)
+    return embed
+
+
+def _team_embed(t):
+    embed = discord.Embed(title=f"{getattr(t, 'name', None) or 'Unknown'}", color=0x3498DB)
+    header = [
+        f"League: {getattr(t, 'league', None) or 'N/A'}",
+        f"Country: {getattr(t, 'country', None) or 'N/A'}",
+    ]
+    embed.add_field(name="Summary", value=" • ".join(header), inline=False)
+    if getattr(t, "stadium", None):
+        embed.add_field(name="Stadium", value=t.stadium, inline=True)
+    if getattr(t, "founded", None):
+        embed.add_field(name="Founded", value=str(t.founded), inline=True)
+    return embed
 
 
 class MyClient(discord.Client):
@@ -51,17 +101,23 @@ class MyClient(discord.Client):
             await init_db()
             print("initialized the database")
         except Exception as e:
-            print(f"db initializaiton falied, exception: {e}")
+            print(f"db initialization failed, exception: {e}")
 
         # create a shared aiohttp session for API calls and IntegrationLayer
         self.http_session = aiohttp.ClientSession()
         self.integration_layer = IntegrationLayer(self.http_session)
 
-        self.tree.copy_global_to(guild=MY_GUILD)
-        await self.tree.sync(guild=MY_GUILD)
+        if DEV_GUILD_ID:
+            dev_guild = discord.Object(id=int(DEV_GUILD_ID))
+            self.tree.copy_global_to(guild=dev_guild)
+            await self.tree.sync(guild=dev_guild)
+            print(f"commands synced to dev guild {DEV_GUILD_ID}")
+        else:
+            await self.tree.sync()
+            print("commands synced globally (new commands can take a while to appear)")
 
         # start the background poster task
-        self._poster_task = asyncio.create_task(self.list_subscriptions())
+        self._poster_task = asyncio.create_task(self.post_subscription_updates())
 
     async def close(self):
         self._shutdown = True
@@ -78,179 +134,88 @@ class MyClient(discord.Client):
 
         await super().close()
 
-    async def list_subscriptions(self):
-        """
-        Polls DB+API every POLL_INTERVAL seconds and posts embeds for both players and teams
-        """
-        try:
-            channel_id = int(BOT_TESTING_CHANNEL)
-        except Exception:
-            print("invalid BOT_TESTING_CHANNEL")
-            return
+    async def _resolve_channel(self, channel_id):
+        channel = self.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.fetch_channel(channel_id)
+            except Exception as e:
+                print(f"could not fetch channel {channel_id}: {e}")
+                return None
+        return channel
 
+    async def post_subscription_updates(self):
+        """Polls DB+API every POLL_INTERVAL seconds and posts an embed to each
+        subscription's channel whenever the tracked data changes."""
         if self.http_session is None:
-            print("HTTP session not initialized; exiting poller")
+            print("HTTP session not initialized; exiting poster")
             return
 
         api = SportsAPIClient(self.http_session)
 
-        # in-memory caches
-        player_cache: dict[str, dict] = (
-            {}
-        )  # name -> {"data": player_info, "timestamp": ts}
-        team_cache: dict[str, dict] = (
-            {}
-        )  # team_name -> {"data": team_info, "timestamp": ts}
-        CACHE_TTL = POLL_INTERVAL
+        # what we last posted, keyed by (channel_id, "player"/"team", name) —
+        # only repost when the underlying data changes
+        last_posted: dict[tuple, tuple] = {}
+
+        await self.wait_until_ready()
 
         while not self._shutdown:
             try:
-                # fetch channel object
-                channel = self.get_channel(channel_id)
-                if channel is None:
-                    try:
-                        channel = await self.fetch_channel(channel_id)
-                    except Exception as e:
-                        print(f"could not fetch channel {channel_id}: {e}")
-                        await asyncio.sleep(max(5, POLL_INTERVAL))
-                        continue
-
-                # fetch subscriptions
                 try:
-                    from db_helpers import (
-                        db_all_player_subscriptions,
-                        db_all_team_subscriptions,
-                    )
-
                     player_subs = await db_all_player_subscriptions()
                     team_subs = await db_all_team_subscriptions()
-
-                    print(f"Player subscriptions: {player_subs}")
-                    print(f"Team subscriptions: {team_subs}")
-
                 except Exception as e:
                     print(f"Exception fetching subscriptions: {e}")
                     player_subs = []
                     team_subs = []
 
-                # ------------------------
-                # POST PLAYER UPDATES
-                # ------------------------
-                player_names = list(
-                    {r["player_name"] for r in player_subs if r.get("player_name")}
-                )
-                for name in player_names:
-                    now = time.time()
-                    cached = player_cache.get(name)
-                    if cached and now - cached["timestamp"] < CACHE_TTL:
-                        player_info = cached["data"]
-                    else:
+                # collect the channels interested in each entity
+                player_channels: dict[str, set] = {}
+                for row in player_subs:
+                    if row.get("player_name") and row.get("channel_id"):
+                        player_channels.setdefault(row["player_name"], set()).add(row["channel_id"])
+                team_channels: dict[str, set] = {}
+                for row in team_subs:
+                    if row.get("team_name") and row.get("channel_id"):
+                        team_channels.setdefault(row["team_name"], set()).add(row["channel_id"])
+
+                for kind, channels_by_name, fetch, snapshot, build_embed in (
+                    ("player", player_channels, api.get_player, _player_snapshot, _player_embed),
+                    ("team", team_channels, api.get_team, _team_snapshot, _team_embed),
+                ):
+                    for name, channel_ids in channels_by_name.items():
                         try:
-                            player_info = await api.get_player(name)
+                            results = await fetch(name)
                         except Exception as e:
-                            print(f"API error fetching '{name}': {e}")
+                            print(f"API error fetching {kind} '{name}': {e}")
                             continue
-                        player_cache[name] = {"data": player_info, "timestamp": now}
-
-                    if player_info in [None, "Server Down"]:
-                        continue
-                    if not player_info:
-                        print(f"No results for '{name}'")
-                        continue
-
-                    p = player_info[0]
-                    embed = discord.Embed(
-                        title=f"{getattr(p, 'name', 'Unknown')}", color=0x2ECC71
-                    )
-                    header = [
-                        f"ID: `{getattr(p, 'id', 'N/A')}`",
-                        f"Team: {getattr(p, 'team', 'N/A')}",
-                        f"Position: {getattr(p, 'position', 'N/A')}",
-                    ]
-                    embed.add_field(
-                        name="Summary", value=" • ".join(header), inline=False
-                    )
-                    if getattr(p, "nationality", None):
-                        embed.add_field(
-                            name="Nationality",
-                            value=getattr(p, "nationality"),
-                            inline=True,
-                        )
-                    if getattr(p, "age", None):
-                        embed.add_field(
-                            name="Age", value=str(getattr(p, "age")), inline=True
-                        )
-                    stats = getattr(p, "stats", None)
-                    if stats:
-                        embed.add_field(
-                            name="Stats", value=str(stats)[:500], inline=False
-                        )
-
-                    try:
-                        await channel.send(embed=embed)
-                        print(f"Posted update for {name} to channel {channel_id}")
-                    except discord.Forbidden:
-                        print(f"Forbidden to send to channel {channel_id}")
-                        break
-                    except Exception as e:
-                        print(f"Failed to send embed for {name}: {e}")
-
-                # ------------------------
-                # POST TEAM UPDATES
-                # ------------------------
-                team_names = list(
-                    {r["team_name"] for r in team_subs if r.get("team_name")}
-                )
-                for name in team_names:
-                    now = time.time()
-                    cached = team_cache.get(name)
-                    if cached and now - cached["timestamp"] < CACHE_TTL:
-                        team_info = cached["data"]
-                    else:
-                        try:
-                            team_info = await api.get_team(name)
-                        except Exception as e:
-                            print(f"API error fetching team '{name}': {e}")
+                        if not results or results == "Server Down":
+                            print(f"No results for {kind} '{name}'")
                             continue
-                        team_cache[name] = {"data": team_info, "timestamp": now}
 
-                    if team_info in [None, "Server Down"]:
-                        continue
-                    if not team_info:
-                        print(f"No results for team '{name}'")
-                        continue
+                        entity = results[0]
+                        snap = snapshot(entity)
 
-                    t = team_info[0]
-                    embed = discord.Embed(
-                        title=f"{getattr(t, 'name', 'Unknown')}", color=0x3498DB
-                    )
-                    header = [
-                        f"ID: `{getattr(t, 'id', 'N/A')}`",
-                        f"League: {getattr(t, 'league', 'N/A')}",
-                        f"Country: {getattr(t, 'country', 'N/A')}",
-                    ]
-                    embed.add_field(
-                        name="Summary", value=" • ".join(header), inline=False
-                    )
-                    if getattr(t, "stadium", None):
-                        embed.add_field(
-                            name="Stadium", value=getattr(t, "stadium"), inline=True
-                        )
-                    if getattr(t, "founded", None):
-                        embed.add_field(
-                            name="Founded",
-                            value=str(getattr(t, "founded")),
-                            inline=True,
-                        )
+                        for channel_id in channel_ids:
+                            try:
+                                channel_id_int = int(channel_id)
+                            except (TypeError, ValueError):
+                                continue
+                            key = (channel_id_int, kind, name)
+                            if last_posted.get(key) == snap:
+                                continue  # nothing new to report
 
-                    try:
-                        await channel.send(embed=embed)
-                        print(f"Posted update for team {name} to channel {channel_id}")
-                    except discord.Forbidden:
-                        print(f"Forbidden to send to channel {channel_id}")
-                        break
-                    except Exception as e:
-                        print(f"Failed to send embed for team {name}: {e}")
+                            channel = await self._resolve_channel(channel_id_int)
+                            if channel is None:
+                                continue
+                            try:
+                                await channel.send(embed=build_embed(entity))
+                                last_posted[key] = snap
+                                print(f"Posted {kind} update for {name} to {channel_id_int}")
+                            except discord.Forbidden:
+                                print(f"Forbidden to send to channel {channel_id_int}")
+                            except Exception as e:
+                                print(f"Failed to send embed for {name}: {e}")
 
                 # wait until next interval
                 await asyncio.sleep(POLL_INTERVAL)
@@ -272,7 +237,7 @@ client = MyClient(intents=intents)
 
 @client.event
 async def on_ready():
-    print("We have successfully loggged in as {0.user}".format(client))
+    print(f"We have successfully logged in as {client.user}")
 
 
 # easter egg message responses
@@ -280,16 +245,15 @@ async def on_ready():
 async def on_message(message):
     if message.author == client.user:
         return
-    if "sports" in message.content.lower():
+    content = message.content.lower()
+    if "sports" in content:
         await message.channel.send("Did somebody say sports!?!")
         return
 
-    if "football" in message.content.lower():
+    if "football" in content:
         await message.channel.send(
-            (
-                "Erm, actually it's called soccer! "
-                "Unless you meant actual football in which case, carry on."
-            )
+            "Erm, actually it's called soccer! "
+            "Unless you meant actual football in which case, carry on."
         )
         return
 
@@ -299,7 +263,7 @@ async def on_message(message):
 @app_commands.describe(
     first_name="First name of the player you want the stats of",
     last_name="Last name of the player you want the stats of",
-    season="Optional season (YYYY)",
+    season="Optional season, 2021-2023 (free API-Football plans only cover those years)",
 )
 async def stats(
     interaction: discord.Interaction,
@@ -307,60 +271,56 @@ async def stats(
     last_name: str,
     season: int | None = None,
 ):
-    """Current season statistics for a specific soccer player (uses APIFootball when available)."""
+    """Season statistics for a specific soccer player (via API-Football)."""
     await interaction.response.defer(thinking=True)
 
-    if len(first_name) == 0 or len(last_name) == 0:
-        await interaction.followup.send(
-            "Please provide both player's first and last name."
-        )
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+    if not first_name or not last_name:
+        await interaction.followup.send("Please provide both the player's first and last name.")
         return
 
-    # cant go past 2023 or before 2021
+    # free API-Football plans only cover the 2021-2023 seasons
     if season is None or season > 2023 or season < 2021:
         season = 2023
 
     integration_layer = client.integration_layer
     if integration_layer is None:
-        await interaction.followup.send("The Integration Layer was never initialized")
+        await interaction.followup.send("The bot is still starting up — try again in a moment.")
         return
     try:
         response = await integration_layer.get_player_stats(
             first_name=first_name, last_name=last_name, season=season
         )
-        if response["status"] != "success":
+        if response["status"] != "success" or not response["data"]:
             await interaction.followup.send(response["status"])
             return
 
         # player information to display
         player_stat = response["data"][0]
-        team_name = player_stat["team"].get("name", "N/A")
-        league_name = player_stat["league"].get("name", "N/A")
-        games_played = player_stat["games"].get("appearences", "N/A")
-        position = player_stat["games"].get("position", "N/A")
-        passes = player_stat["passes"].get("total", "N/A")
-        shots = player_stat["shots"].get("total", "N/A")
-        goals = player_stat["goals"].get("total", "N/A")
+        team_name = (player_stat.get("team") or {}).get("name", "N/A")
+        league_name = (player_stat.get("league") or {}).get("name", "N/A")
+        games = player_stat.get("games") or {}
+        games_played = games.get("appearences", "N/A")
+        position = games.get("position", "N/A")
+        passes = (player_stat.get("passes") or {}).get("total", "N/A")
+        shots = (player_stat.get("shots") or {}).get("total", "N/A")
+        goals = (player_stat.get("goals") or {}).get("total", "N/A")
 
-        embed = discord.Embed(
-            title=f"Season {season}: {first_name} {last_name}", color=0x2ECC71
-        )
-
+        embed = discord.Embed(title=f"Season {season}: {first_name} {last_name}", color=0x2ECC71)
         embed.add_field(
             name="League / Team",
             value=f"League: {league_name}\nTeam: {team_name}",
             inline=False,
         )
-
         embed.add_field(
             name="Games / Position",
             value=f"Games Played: {games_played}\nPosition: {position}",
             inline=False,
         )
-
-        embed.add_field(name="Passes", value=passes, inline=True)
-        embed.add_field(name="Shots", value=shots, inline=True)
-        embed.add_field(name="Goals", value=goals, inline=True)
+        embed.add_field(name="Passes", value=str(passes), inline=True)
+        embed.add_field(name="Shots", value=str(shots), inline=True)
+        embed.add_field(name="Goals", value=str(goals), inline=True)
 
         await interaction.followup.send(embed=embed)
 
@@ -370,62 +330,56 @@ async def stats(
 
 # subscribe player command
 @client.tree.command()
-# @app_commands.rename(full_name='full name')
 @app_commands.describe(full_name="The full name of the player you want to subscribe to")
 async def subscribe_player(interaction: discord.Interaction, full_name: str):
+    """Subscribes you to a player; updates post in this channel."""
+    await interaction.response.defer(thinking=True)
     success, message = await db_subscribe_player(
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
-        player_name=full_name,
+        player_name=full_name.strip(),
         channel_id=str(interaction.channel_id),
         guild_id=str(interaction.guild_id),
     )
-    await interaction.response.send_message(message)
+    await interaction.followup.send(message)
 
 
 # subscribe team command
 @client.tree.command()
-# @app_commands.rename(full_name='team name')
 @app_commands.describe(full_name="The name of the team you want to subscribe to")
 async def subscribe_team(interaction: discord.Interaction, full_name: str):
+    """Subscribes you to a team; updates post in this channel."""
+    await interaction.response.defer(thinking=True)
     success, message = await db_subscribe_team(
         discord_id=str(interaction.user.id),
         username=interaction.user.name,
-        team_name=full_name,
+        team_name=full_name.strip(),
         channel_id=str(interaction.channel_id),
         guild_id=str(interaction.guild_id),
     )
-    await interaction.response.send_message(message)
+    await interaction.followup.send(message)
 
 
 # unsubscribe player command
 @client.tree.command()
-# @app_commands.rename(full_name='full name')
-@app_commands.describe(
-    full_name="The full name of the player you want to unsubscribe from"
-)
+@app_commands.describe(full_name="The full name of the player you want to unsubscribe from")
 async def unsubscribe_player(interaction: discord.Interaction, full_name: str):
     """Unsubscribes you from a player"""
     success, message = await db_unsubscribe_player(
-        discord_id=str(interaction.user.id), player_name=full_name
+        discord_id=str(interaction.user.id), player_name=full_name.strip()
     )
-    await interaction.response.send_message(
-        "You have been unsubscribed from " + full_name
-    )
+    await interaction.response.send_message(message)
 
 
 # unsubscribe team command
 @client.tree.command()
-# @app_commands.rename(full_name='team name')
 @app_commands.describe(full_name="The name of the team you want to unsubscribe from")
 async def unsubscribe_team(interaction: discord.Interaction, full_name: str):
     """Unsubscribes you from a team"""
     success, message = await db_unsubscribe_team(
-        discord_id=str(interaction.user.id), team_name=full_name
+        discord_id=str(interaction.user.id), team_name=full_name.strip()
     )
-    await interaction.response.send_message(
-        "You have been unsubscribed from " + full_name
-    )
+    await interaction.response.send_message(message)
 
 
 # list subscriptions
@@ -438,19 +392,26 @@ async def subscriptions(interaction: discord.Interaction):
     players = subs["players"]
     teams = subs["teams"]
     channel_id = subs["channel_id"]
-    guild_id = subs["guild_id"]
 
     player_text = "\n".join(f"- {p}" for p in players) if players else "None"
     team_text = "\n".join(f"- {t}" for t in teams) if teams else "None"
-    channel_line = f"Updates will be posted in <#{channel_id}>\n" if channel_id else ""
-    guild_line = f"Guild ID: {guild_id}\n" if guild_id else ""
+    channel_line = f"\nUpdates will be posted in <#{channel_id}>" if channel_id else ""
 
     await interaction.response.send_message(
-        f"""Hi {interaction.user.display_name}!
-        Players you're subscribed to:\n{player_text}
-        Teams you're subscribed to:\n{team_text}
-        {channel_line}{guild_line}"""
+        f"Hi {interaction.user.display_name}!\n"
+        f"**Players you're subscribed to:**\n{player_text}\n"
+        f"**Teams you're subscribed to:**\n{team_text}"
+        f"{channel_line}"
     )
 
 
-client.run(TOKEN)
+def main():
+    if not TOKEN:
+        raise RuntimeError(
+            "DISCORD_TOKEN not found. Copy RenameTo.env to .env and set DISCORD_TOKEN."
+        )
+    client.run(TOKEN)
+
+
+if __name__ == "__main__":
+    main()

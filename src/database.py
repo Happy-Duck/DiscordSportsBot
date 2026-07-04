@@ -1,19 +1,12 @@
 # database.py
 
-import asyncio
-from sqlalchemy.ext.asyncio import AsyncSession  # pyright: ignore
 from sqlalchemy import select, delete  # pyright: ignore
-from db_skeleton import (
+from .db_skeleton import (
     SessionLocal,
-    Base,
     engine,
     Team,
     Player,
-    Match,
-    PlayerStat,
     Member,
-    PlayerSubscription,
-    TeamSubscription,
 )
 
 
@@ -61,9 +54,7 @@ async def test_database():
     try:
         async with SessionLocal() as session:
             # Insert a dummy team record
-            test_team = Team(
-                id=9999, name="Test Team FC", league="Test League", country="Testland"
-            )
+            test_team = Team(id=9999, name="Test Team FC", league="Test League", country="Testland")
             session.add(test_team)
             await session.commit()
 

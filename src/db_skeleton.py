@@ -14,15 +14,19 @@ from sqlalchemy import (  # pyright: ignore
     Date,
     UniqueConstraint,
 )
+from sqlalchemy.pool import NullPool  # pyright: ignore
 import os
 
-# Use SQLite for local testing, the same DB the bot will connect to
+# Use SQLite for local testing, the same DB the bot will connect to.
+# SPORTSBOT_DB can override the location (used by tests / deployments).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # src/
-DATABASE_PATH = os.path.join(BASE_DIR, "sportsbot.db")
+DATABASE_PATH = os.getenv("SPORTSBOT_DB", os.path.join(BASE_DIR, "sportsbot.db"))
 DATABASE_URL = f"sqlite+aiosqlite:///{DATABASE_PATH}"
 
-# Create the async engine and session factory
-engine = create_async_engine(DATABASE_URL, echo=False, future=True)
+# Create the async engine and session factory.
+# NullPool: aiosqlite connections must not be reused across event loops
+# (pytest creates a fresh loop per test), and opening SQLite connections is cheap.
+engine = create_async_engine(DATABASE_URL, echo=False, future=True, poolclass=NullPool)
 SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 # Base class for SQLAlchemy
@@ -93,12 +97,8 @@ class Match(Base):
     date = Column(Date)
     home_score = Column(Integer)
     away_score = Column(Integer)
-    home_team = relationship(
-        "Team", foreign_keys=[home_team_id], back_populates="home_matches"
-    )
-    away_team = relationship(
-        "Team", foreign_keys=[away_team_id], back_populates="away_matches"
-    )
+    home_team = relationship("Team", foreign_keys=[home_team_id], back_populates="home_matches")
+    away_team = relationship("Team", foreign_keys=[away_team_id], back_populates="away_matches")
     stats = relationship(
         "PlayerStat", back_populates="match"
     )  # leads to every PlayerStat object with this MatchID (One to Many)
@@ -142,9 +142,7 @@ class LifetimeStat(Base):
 
 class Member(Base):
     __tablename__ = "members"
-    id = Column(
-        Integer, primary_key=True
-    )  # Internal PK. Could be mapped to discord_id if desired.
+    id = Column(Integer, primary_key=True)  # Internal PK. Could be mapped to discord_id if desired.
     discord_id = Column(String(50), unique=True, nullable=False)  # discord key
     username = Column(String(100))
     timezone = Column(String(50))  # transforms on the date-time for matches

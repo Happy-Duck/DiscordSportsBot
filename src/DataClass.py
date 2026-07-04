@@ -1,21 +1,33 @@
 # DataClass.py
 
 # Utility data containers used across the codebase.
-# A better approach would be initializing fields to None and handling errors,
-# but for now empty strings are used for safe initialization.
+
+from datetime import date, datetime
+
+
+def _age_from_date_born(date_born):
+    """Compute an age in years from a 'YYYY-MM-DD' string, or None."""
+    if not date_born:
+        return None
+    try:
+        born = datetime.strptime(date_born, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+    today = date.today()
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
 class Player:
     def __init__(
         self,
-        id="",
-        name="",
-        team_id="",
-        position="",
-        age="",
-        nationality="",
-        team="",
-        stats="",
+        id=None,
+        name=None,
+        team_id=None,
+        position=None,
+        age=None,
+        nationality=None,
+        team=None,
+        stats=None,
     ):
         self.id = id
         self.name = name
@@ -27,71 +39,52 @@ class Player:
         self.stats = stats
 
     def from_api_json(self, data: dict):
+        """Populate fields from a TheSportsDB player object (or a generic dict)."""
         if not data:
             return self
 
-        # id
         self.id = data.get("idPlayer") or data.get("id") or self.id
-
-        # name
         self.name = data.get("strPlayer") or data.get("name") or self.name
-
-        # position
         self.position = data.get("strPosition") or data.get("position") or self.position
-
-        # nationality
-        self.nationality = (
-            data.get("strNationality") or data.get("nationality") or self.nationality
-        )
-
-        # # age (receive )
-        # self.age = data.get("strAge") or data.get("age") or self.age
-
-        # # stat
-        # self.stats = data.get("strStats") or data.get("stats") or self.stats
-
-        # team info
+        self.nationality = data.get("strNationality") or data.get("nationality") or self.nationality
+        self.age = _age_from_date_born(data.get("dateBorn")) or data.get("age") or self.age
         self.team = data.get("strTeam") or data.get("team") or self.team
         self.team_id = data.get("idTeam") or data.get("team_id") or self.team_id
 
         return self
 
 
-# same as above, I should initalize them to none but for now before tests, this shall be fine.
 class Team:
     def __init__(
         self,
-        id="",
-        name="",
-        league="",
-        country="",
-        players=[],
-        home_matches="",
-        away_matches="",
+        id=None,
+        name=None,
+        league=None,
+        country=None,
+        players=None,
+        stadium=None,
+        founded=None,
     ):
         self.id = id
         self.name = name
         self.league = league
         self.country = country
-        self.players = players
-        self.home_matches = home_matches
-        self.away_matches = away_matches
+        self.players = players if players is not None else []
+        self.stadium = stadium
+        self.founded = founded
 
     def from_api_json(self, data: dict):
+        """Populate fields from a TheSportsDB team object (or a generic dict)."""
         if not data:
             return self
-        # team id (team id not apifootball id which is different?)
-        self.id = data.get("idTeam") or self.id
-        # name
-        self.name = data.get("strTeam") or data.get("strTeamAlternate") or self.id
-        # league
-        self.league_id = data.get("strLeague") or self.league_id
-        # country
-        self.country = data.get("strCountry") or self.country
-        # players
 
-        # home matches
-
-        # away matches
+        self.id = data.get("idTeam") or data.get("id") or self.id
+        self.name = (
+            data.get("strTeam") or data.get("strTeamAlternate") or data.get("name") or self.name
+        )
+        self.league = data.get("strLeague") or data.get("league") or self.league
+        self.country = data.get("strCountry") or data.get("country") or self.country
+        self.stadium = data.get("strStadium") or data.get("stadium") or self.stadium
+        self.founded = data.get("intFormedYear") or data.get("founded") or self.founded
 
         return self

@@ -1,33 +1,30 @@
 # db_helpers.py
 
-import asyncio
-from sqlalchemy import select, delete  # pyright: ignore
-from sqlalchemy.ext.asyncio import AsyncSession  # pyright: ignore
-from db_skeleton import (
+import aiohttp
+from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
+from typing import Dict, List
+
+from .db_skeleton import (
     SessionLocal,
     Member,
     Player,
     PlayerSubscription,
     Team,
     TeamSubscription,
+    init_db,
 )
-from db_skeleton import init_db
-from typing import Dict, List
-from sqlalchemy.exc import OperationalError  # pyright: ignore
+from .SportsAPIClient import SportsAPIClient
 
 
 async def get_or_create_member(discord_id: str, username: str) -> Member:
     async with SessionLocal() as session:
-        result = await session.execute(
-            select(Member).where(Member.discord_id == discord_id)
-        )
+        result = await session.execute(select(Member).where(Member.discord_id == discord_id))
         member = result.scalar_one_or_none()
         if member:
             return member
 
-        member = Member(
-            discord_id=discord_id, username=username
-        )  # no timezone field yet
+        member = Member(discord_id=discord_id, username=username)  # no timezone field yet
         session.add(member)
         await session.commit()
         await session.refresh(member)
@@ -49,19 +46,7 @@ async def db_subscribe_player(
         player = result.scalar_one_or_none()
 
         if not player:
-            # try to fetch from the external API if not in DB
-            try:
-                import aiohttp
-
-                # import here to avoid circular imports / heavy top-level deps
-                from SportsAPIClient import SportsAPIClient
-            except Exception as e:
-                # if imports fail, return the original "not found" behavior
-                return (
-                    False,
-                    f"Player '{player_name}' not found (and could not access API): {e}",
-                )
-
+            # not in DB yet -> look the player up on the external API
             try:
                 async with aiohttp.ClientSession() as http:
                     api = SportsAPIClient(http)
@@ -70,9 +55,9 @@ async def db_subscribe_player(
                 api_players = None
                 print(f"Error calling external API for '{player_name}': {e}")
 
-            # Validate API result
             if not api_players or api_players == "Server Down":
                 return False, f"Player '{player_name}' not found."
+
             # take the first API match as canonical for insertion
             api_p = api_players[0]
 
@@ -80,9 +65,7 @@ async def db_subscribe_player(
             team_obj = None
             team_name = getattr(api_p, "team", None)
             if team_name:
-                result = await session.execute(
-                    select(Team).where(Team.name == team_name)
-                )
+                result = await session.execute(select(Team).where(Team.name == team_name))
                 team_obj = result.scalar_one_or_none()
                 if not team_obj:
                     team_obj = Team(name=team_name)
@@ -90,31 +73,26 @@ async def db_subscribe_player(
                     # flush to get team_obj.id without committing whole session
                     await session.flush()
 
-            # safe conversions for numeric fields
             def safe_int(val):
                 try:
                     if val is None or val == "":
                         return None
                     return int(val)
-                except Exception:
+                except (TypeError, ValueError):
                     return None
 
-            # create the Player SQL row from api data (map common fields)
-            new_player = Player(
-                name=getattr(api_p, "name", player_name),
+            player = Player(
+                name=getattr(api_p, "name", None) or player_name,
                 team_id=(team_obj.id if team_obj else None),
                 position=getattr(api_p, "position", None),
                 age=safe_int(getattr(api_p, "age", None)),
                 nationality=getattr(api_p, "nationality", None),
             )
-            session.add(new_player)
-            await session.flush()  # ensure new_player.id is available
+            session.add(player)
             await session.commit()
-            # refresh to populate relationship attributes if needed
-            await session.refresh(new_player)
-            player = new_player
+            await session.refresh(player)
 
-        # Now create or find existing subscription (same as before)
+        # create the subscription (or update where updates should be posted)
         result = await session.execute(
             select(PlayerSubscription).where(
                 PlayerSubscription.member_id == member.id,
@@ -132,14 +110,13 @@ async def db_subscribe_player(
             session.add(sub)
             await session.commit()
             return True, f"You have been subscribed to {player.name}!"
-        else:
-            if channel_id is not None:
-                sub.channel_id = channel_id
-            if guild_id is not None:
-                sub.guild_id = guild_id
 
+        if channel_id is not None:
+            sub.channel_id = channel_id
+        if guild_id is not None:
+            sub.guild_id = guild_id
         await session.commit()
-        return True, f"You have been subscribed to {player_name}!"
+        return True, f"You were already subscribed to {player.name} — updates will post here."
 
 
 async def db_subscribe_team(
@@ -152,26 +129,15 @@ async def db_subscribe_team(
     async with SessionLocal() as session:
         member = await get_or_create_member(discord_id, username)
 
-        # 1) try to find existing Team by exact name
+        # try to find existing Team by exact name
         result = await session.execute(select(Team).where(Team.name == team_name))
         team = result.scalar_one_or_none()
 
         if not team:
-            # 2) not found locally -> try external API (mirror player flow)
-            try:
-                import aiohttp
-                from SportsAPIClient import SportsAPIClient
-            except Exception as e:
-                # couldn't import API client -> behave like "not found"
-                return (
-                    False,
-                    f"Team '{team_name}' not found (and could not access API): {e}",
-                )
-
+            # not in DB yet -> look the team up on the external API
             try:
                 async with aiohttp.ClientSession() as http:
                     api = SportsAPIClient(http)
-                    # adapt if your client uses another method name
                     api_teams = await api.get_team(team_name)
             except Exception as e:
                 api_teams = None
@@ -180,53 +146,18 @@ async def db_subscribe_team(
             if not api_teams or api_teams == "Server Down":
                 return False, f"Team '{team_name}' not found."
 
-            # Use the first match returned by API
+            # use the first match returned by the API as canonical
             api_t = api_teams[0]
-
-            # helper to read either dict-like or object-like responses
-            def api_get(obj, *keys):
-                for k in keys:
-                    try:
-                        if isinstance(obj, dict):
-                            val = obj.get(k)
-                        else:
-                            val = getattr(obj, k, None)
-                    except Exception:
-                        val = None
-                    if val not in (None, "", []):
-                        return val
-                return None
-
-            # canonical name candidates from common API keys
-            canonical_name = api_get(api_t, "strTeam", "name", "team", team_name)
-            if canonical_name is None:
-                canonical_name = team_name
-
-            # create Team with only allowed constructor kwargs (name)
-            new_team = Team(name=canonical_name)
-            session.add(new_team)
-            await session.flush()  # new_team.id now available and instance is mapped
-
-            # map API keys -> Team model columns (Team has: name, league, country)
-            mapping = {
-                "league": ("strLeague", "league"),
-                "country": ("strCountry", "country", "strLocation"),
-            }
-
-            for model_attr, api_keys in mapping.items():
-                # only set if Team model actually has the attribute
-                if hasattr(new_team, model_attr):
-                    val = api_get(api_t, *api_keys)
-                    # no complex conversions required for league/country (strings)
-                    if val is not None:
-                        setattr(new_team, model_attr, val)
-
-            # commit and refresh
+            team = Team(
+                name=getattr(api_t, "name", None) or team_name,
+                league=getattr(api_t, "league", None),
+                country=getattr(api_t, "country", None),
+            )
+            session.add(team)
             await session.commit()
-            await session.refresh(new_team)
-            team = new_team
+            await session.refresh(team)
 
-        # 3) create or update the TeamSubscription (same pattern as players)
+        # create the subscription (or update where updates should be posted)
         result = await session.execute(
             select(TeamSubscription).where(
                 TeamSubscription.member_id == member.id,
@@ -244,25 +175,23 @@ async def db_subscribe_team(
             session.add(sub)
             await session.commit()
             return True, f"You have been subscribed to {team.name}!"
-        else:
-            if channel_id is not None:
-                sub.channel_id = channel_id
-            if guild_id is not None:
-                sub.guild_id = guild_id
 
+        if channel_id is not None:
+            sub.channel_id = channel_id
+        if guild_id is not None:
+            sub.guild_id = guild_id
         await session.commit()
-        return True, f"You have been subscribed to {team_name}!"
+        return True, f"You were already subscribed to {team.name} — updates will post here."
 
 
 async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
+    empty = {"players": [], "teams": [], "channel_id": None, "guild_id": None}
     try:
         async with SessionLocal() as session:
-            result = await session.execute(
-                select(Member).where(Member.discord_id == discord_id)
-            )
+            result = await session.execute(select(Member).where(Member.discord_id == discord_id))
             member = result.scalar_one_or_none()
             if not member:
-                return {"players": [], "teams": []}
+                return empty
 
             # players
             result_players = await session.execute(
@@ -280,62 +209,20 @@ async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
             )
             teams = [t.name for t in result_teams.scalars().unique().all()]
 
-            # find a channel_id and guild_id:
-            # prefer an explicitly-set channel/guild from PlayerSubscription,
-            # otherwise fall back to TeamSubscription.
+            # pick the first explicitly-set channel/guild, preferring player subs
             channel_id = None
             guild_id = None
-
-            # get all player subscription channel/guild values (may be many)
-            result_channel = await session.execute(
-                select(PlayerSubscription.channel_id).where(
-                    PlayerSubscription.member_id == member.id
+            for model in (PlayerSubscription, TeamSubscription):
+                result_rows = await session.execute(
+                    select(model.channel_id, model.guild_id).where(model.member_id == member.id)
                 )
-            )
-            player_channel_vals = result_channel.scalars().all()  # list, possibly empty
-
-            result_guild = await session.execute(
-                select(PlayerSubscription.guild_id).where(
-                    PlayerSubscription.member_id == member.id
-                )
-            )
-            player_guild_vals = result_guild.scalars().all()
-
-            # choose first non-None value if present
-            for v in player_channel_vals:
-                if v is not None:
-                    channel_id = v
+                for row_channel, row_guild in result_rows.all():
+                    if channel_id is None and row_channel is not None:
+                        channel_id = row_channel
+                    if guild_id is None and row_guild is not None:
+                        guild_id = row_guild
+                if channel_id is not None and guild_id is not None:
                     break
-
-            for v in player_guild_vals:
-                if v is not None:
-                    guild_id = v
-                    break
-
-            # if still None, check team subscriptions
-            if channel_id is None:
-                result_channel = await session.execute(
-                    select(TeamSubscription.channel_id).where(
-                        TeamSubscription.member_id == member.id
-                    )
-                )
-                team_channel_vals = result_channel.scalars().all()
-                for v in team_channel_vals:
-                    if v is not None:
-                        channel_id = v
-                        break
-
-            if guild_id is None:
-                result_guild = await session.execute(
-                    select(TeamSubscription.guild_id).where(
-                        TeamSubscription.member_id == member.id
-                    )
-                )
-                team_guild_vals = result_guild.scalars().all()
-                for v in team_guild_vals:
-                    if v is not None:
-                        guild_id = v
-                        break
 
             return {
                 "players": players,
@@ -345,24 +232,23 @@ async def db_subscriptions(discord_id: str) -> Dict[str, List[str]]:
             }
 
     except OperationalError:
-        # initialize the db if stuff doesnt work
+        # initialize the db if the tables don't exist yet
         await init_db()
-        return {"players": [], "teams": []}
+        return empty
 
 
 async def db_unsubscribe_player(discord_id: str, player_name: str):
     async with SessionLocal() as session:
-        result = await session.execute(
-            select(Member).where(Member.discord_id == discord_id)
-        )
+        result = await session.execute(select(Member).where(Member.discord_id == discord_id))
         member = result.scalar_one_or_none()
         if not member:
-            return False, "Member not found."
+            return False, "You don't have any subscriptions yet."
 
         result = await session.execute(select(Player).where(Player.name == player_name))
         player = result.scalar_one_or_none()
         if not player:
             return False, f"Player '{player_name}' not found."
+
         result = await session.execute(
             select(PlayerSubscription).where(
                 PlayerSubscription.member_id == member.id,
@@ -379,12 +265,10 @@ async def db_unsubscribe_player(discord_id: str, player_name: str):
 
 async def db_unsubscribe_team(discord_id: str, team_name: str):
     async with SessionLocal() as session:
-        result = await session.execute(
-            select(Member).where(Member.discord_id == discord_id)
-        )
+        result = await session.execute(select(Member).where(Member.discord_id == discord_id))
         member = result.scalar_one_or_none()
         if not member:
-            return False, "Member not found."
+            return False, "You don't have any subscriptions yet."
 
         result = await session.execute(select(Team).where(Team.name == team_name))
         team = result.scalar_one_or_none()
@@ -403,44 +287,56 @@ async def db_unsubscribe_team(discord_id: str, team_name: str):
 
         await session.delete(sub)
         await session.commit()
-        return True, f"You have been unsubscribed from '{team_name}'."
+        return True, f"You have been unsubscribed from {team_name}."
 
 
 async def db_all_player_subscriptions():
-    from db_skeleton import SessionLocal, PlayerSubscription, Player, Member
-
+    """Every player subscription with the channel/guild it should post to."""
     async with SessionLocal() as session:
         result = await session.execute(
-            select(Member.discord_id, Member.username, Player.name.label("player_name"))
+            select(
+                Member.discord_id,
+                Member.username,
+                Player.name.label("player_name"),
+                PlayerSubscription.channel_id,
+                PlayerSubscription.guild_id,
+            )
             .join(PlayerSubscription, Member.id == PlayerSubscription.member_id)
             .join(Player, Player.id == PlayerSubscription.player_id)
         )
-        rows = [
+        return [
             {
                 "discord_id": r.discord_id,
                 "username": r.username,
                 "player_name": r.player_name,
+                "channel_id": r.channel_id,
+                "guild_id": r.guild_id,
             }
             for r in result.all()
         ]
-        return rows
 
 
 async def db_all_team_subscriptions():
-    from db_skeleton import SessionLocal, TeamSubscription, Team, Member
-
+    """Every team subscription with the channel/guild it should post to."""
     async with SessionLocal() as session:
         result = await session.execute(
-            select(Member.discord_id, Member.username, Team.name.label("team_name"))
+            select(
+                Member.discord_id,
+                Member.username,
+                Team.name.label("team_name"),
+                TeamSubscription.channel_id,
+                TeamSubscription.guild_id,
+            )
             .join(TeamSubscription, Member.id == TeamSubscription.member_id)
             .join(Team, Team.id == TeamSubscription.team_id)
         )
-        rows = [
+        return [
             {
                 "discord_id": r.discord_id,
                 "username": r.username,
                 "team_name": r.team_name,
+                "channel_id": r.channel_id,
+                "guild_id": r.guild_id,
             }
             for r in result.all()
         ]
-        return rows

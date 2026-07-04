@@ -55,8 +55,12 @@ This method ensures all dependencies are isolated and correct.
     - Open `.env` and add your keys:
       ```env
       DISCORD_TOKEN=your_discord_bot_token_here
-      API_FOOTBALL_KEY=your_api_key_here
+      API_FOOTBALL_KEY=your_api_key_here   # optional, needed only for /stats
+      DEV_GUILD_ID=your_server_id_here     # optional, makes slash commands appear instantly
+      POLL_INTERVAL=300                    # optional, seconds between subscription checks
       ```
+    - In the [Discord Developer Portal](https://discord.com/developers/applications), enable the
+      **Message Content Intent** for your bot (Bot → Privileged Gateway Intents).
 
 3.  **Build and Run**
     ```bash
@@ -89,19 +93,45 @@ This method ensures all dependencies are isolated and correct.
     pip install -r requirements.txt
     ```
 
-4.  **Initialize Database**
+4.  **Initialize Database** (optional — the bot also does this on startup)
     ```bash
-    python src/setup_database.py
+    python -m src.setup_database
     ```
     This creates the local `src/sportsbot.db`.
 
 5.  **Configure Environment Variables**
     -   Create a `.env` file (copy `RenameTo.env`) and add your `DISCORD_TOKEN`.
+    -   Optionally set `API_FOOTBALL_KEY` (for `/stats`), `DEV_GUILD_ID` (instant
+        slash-command sync while developing), and `POLL_INTERVAL`.
 
-6.  **Run the Bot**
+6.  **Run the Bot** (from the project root, using the module form)
     ```bash
-    python src/bot.py
+    python -m src.bot
     ```
+
+## Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/subscribe_player <full_name>` | Follow a player; updates post in the channel you ran the command in |
+| `/subscribe_team <full_name>` | Follow a team; updates post in the channel you ran the command in |
+| `/unsubscribe_player <full_name>` | Stop following a player |
+| `/unsubscribe_team <full_name>` | Stop following a team |
+| `/subscriptions` | List everything you follow |
+| `/stats <first_name> <last_name> [season]` | Season stats for a player (needs `API_FOOTBALL_KEY`; free plans cover seasons 2021–2023) |
+
+The background poster re-checks your subscriptions every `POLL_INTERVAL` seconds
+(default 300) and posts an embed to the subscribing channel whenever the tracked
+player/team data changes.
+
+## Running Tests
+
+```bash
+pytest tests/
+```
+
+Offline and TheSportsDB tests always run; API-Football tests are skipped unless
+`API_FOOTBALL_KEY` is set in your environment.
 
 ## Group Members
 

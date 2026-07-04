@@ -1,7 +1,7 @@
 # db_helpers.py
 
 import aiohttp
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 from typing import Dict, List
 
@@ -15,6 +15,12 @@ from .db_skeleton import (
     init_db,
 )
 from .SportsAPIClient import SportsAPIClient
+
+
+def _name_matches(column, name: str):
+    """Case-insensitive name equality: users type 'lionel messi' in Discord
+    but rows store the API's canonical 'Lionel Messi'."""
+    return func.lower(column) == name.strip().lower()
 
 
 async def get_or_create_member(discord_id: str, username: str) -> Member:
@@ -41,9 +47,11 @@ async def db_subscribe_player(
     async with SessionLocal() as session:
         member = await get_or_create_member(discord_id, username)
 
-        # look for exact matches first (older data may contain duplicate
+        # look for matches first (older data may contain duplicate
         # rows for the same name, so never assume there is at most one)
-        result = await session.execute(select(Player).where(Player.name == player_name))
+        result = await session.execute(
+            select(Player).where(_name_matches(Player.name, player_name))
+        )
         matching_players = result.scalars().all()
         player = matching_players[0] if matching_players else None
 
@@ -62,13 +70,27 @@ async def db_subscribe_player(
 
             # take the first API match as canonical for insertion
             api_p = api_players[0]
+            canonical_name = getattr(api_p, "name", None) or player_name
 
+            # the canonical name may already exist under different user input
+            # (e.g. the user searched "Messi" but "Lionel Messi" is stored) —
+            # without this re-check we'd insert a duplicate row
+            result = await session.execute(
+                select(Player).where(_name_matches(Player.name, canonical_name))
+            )
+            matching_players = result.scalars().all()
+
+        if matching_players:
+            player = matching_players[0]
+        else:
             # ensure the player's team is present (create if necessary)
             team_obj = None
             team_name = getattr(api_p, "team", None)
             if team_name:
-                result = await session.execute(select(Team).where(Team.name == team_name))
-                team_obj = result.scalar_one_or_none()
+                result = await session.execute(
+                    select(Team).where(_name_matches(Team.name, team_name))
+                )
+                team_obj = result.scalars().first()
                 if not team_obj:
                     team_obj = Team(name=team_name)
                     session.add(team_obj)
@@ -84,7 +106,7 @@ async def db_subscribe_player(
                     return None
 
             player = Player(
-                name=getattr(api_p, "name", None) or player_name,
+                name=canonical_name,
                 team_id=(team_obj.id if team_obj else None),
                 position=getattr(api_p, "position", None),
                 age=safe_int(getattr(api_p, "age", None)),
@@ -133,8 +155,8 @@ async def db_subscribe_team(
     async with SessionLocal() as session:
         member = await get_or_create_member(discord_id, username)
 
-        # try to find existing Team by exact name (duplicates possible in old data)
-        result = await session.execute(select(Team).where(Team.name == team_name))
+        # try to find an existing Team by name (duplicates possible in old data)
+        result = await session.execute(select(Team).where(_name_matches(Team.name, team_name)))
         matching_teams = result.scalars().all()
         team = matching_teams[0] if matching_teams else None
 
@@ -153,8 +175,20 @@ async def db_subscribe_team(
 
             # use the first match returned by the API as canonical
             api_t = api_teams[0]
+            canonical_name = getattr(api_t, "name", None) or team_name
+
+            # the canonical name may already exist under different user input —
+            # without this re-check we'd insert a duplicate row
+            result = await session.execute(
+                select(Team).where(_name_matches(Team.name, canonical_name))
+            )
+            matching_teams = result.scalars().all()
+
+        if matching_teams:
+            team = matching_teams[0]
+        else:
             team = Team(
-                name=getattr(api_t, "name", None) or team_name,
+                name=canonical_name,
                 league=getattr(api_t, "league", None),
                 country=getattr(api_t, "country", None),
             )
@@ -260,12 +294,14 @@ async def db_unsubscribe_player(discord_id: str, player_name: str):
             .join(Player, Player.id == PlayerSubscription.player_id)
             .where(
                 PlayerSubscription.member_id == member.id,
-                Player.name == player_name,
+                _name_matches(Player.name, player_name),
             )
         )
         subs = result.scalars().all()
         if not subs:
-            result = await session.execute(select(Player.id).where(Player.name == player_name))
+            result = await session.execute(
+                select(Player.id).where(_name_matches(Player.name, player_name))
+            )
             if result.first() is None:
                 return False, f"Player '{player_name}' not found."
             return False, f"You were not subscribed to '{player_name}'."
@@ -290,12 +326,14 @@ async def db_unsubscribe_team(discord_id: str, team_name: str):
             .join(Team, Team.id == TeamSubscription.team_id)
             .where(
                 TeamSubscription.member_id == member.id,
-                Team.name == team_name,
+                _name_matches(Team.name, team_name),
             )
         )
         subs = result.scalars().all()
         if not subs:
-            result = await session.execute(select(Team.id).where(Team.name == team_name))
+            result = await session.execute(
+                select(Team.id).where(_name_matches(Team.name, team_name))
+            )
             if result.first() is None:
                 return False, f"Team '{team_name}' not found."
             return False, f"You were not subscribed to '{team_name}'."

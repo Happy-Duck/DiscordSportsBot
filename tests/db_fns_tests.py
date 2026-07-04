@@ -23,5 +23,6 @@ async def run_tests():
     player_test = await add_player_to_team("Test Player", "Test Team FC")
     print(player_test)
 
+
 if __name__ == "__main__":
     asyncio.run(run_tests())

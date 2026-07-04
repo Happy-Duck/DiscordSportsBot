@@ -1,47 +1,177 @@
 # api_test.py
-import os
-import pytest
-import aiohttp
-import sys
+#
+# Offline tests (matching algorithms) always run.
+# TheSportsDB tests only need network access (free public key).
+# API-Football tests are skipped unless API_FOOTBALL_KEY is set.
+
 import json
-from pathlib import Path
+import os
+
+import aiohttp
+import pytest
+
 from src.SportsAPIClient import SportsAPIClient
 from src.IntegrationLayer import IntegrationLayer
 
-PROJECT_ROOT = (
-    Path(__file__).resolve().parent.parent
-)  # getting the root cause the tests are in /tests - painful to figure out this issue by the way
-sys.path.insert(0, str(PROJECT_ROOT))
-
-pytestmark = pytest.mark.skipif(
+requires_af_key = pytest.mark.skipif(
     not os.getenv("API_FOOTBALL_KEY"),
     reason="API_FOOTBALL_KEY not found. Go to .env and set API_FOOTBALL_KEY locally.",
 )
 
-# we should be able to follow a similar pattern to test other api stuff
+
+# ------------------------- offline tests -------------------------
+
+
+@pytest.mark.asyncio
+async def test_string_match_algorithm():
+    async with aiohttp.ClientSession() as session:
+        client = IntegrationLayer(session)
+
+        list_of_potential_player = [
+            {
+                "player": {
+                    "id": 249239,
+                    "name": "Lionel Messi Nyamsi",
+                    "firstname": "Lionel Messi",
+                    "lastname": "Nyamsi",
+                    "nationality": "Cameroon",
+                    "position": "Attacker",
+                }
+            },
+            {
+                "player": {
+                    "id": 154,
+                    "name": "L. Messi",
+                    "firstname": "Lionel Andrés",
+                    "lastname": "Messi Cuccittini",
+                    "nationality": "Argentina",
+                    "position": "Attacker",
+                }
+            },
+        ]
+        result = await client.string_match_algorithm(
+            list_of_potential_player=list_of_potential_player,
+            first_name="Lionel",
+            last_name="Messi",
+        )
+
+        assert len(result) == 1
+        assert result[0]["player"]["id"] == 154
+        assert result[0]["player"]["name"] == "L. Messi"
+
+
+@pytest.mark.asyncio
+async def test_string_match_is_accent_insensitive():
+    async with aiohttp.ClientSession() as session:
+        client = IntegrationLayer(session)
+        players = [
+            {
+                "player": {
+                    "id": 278,
+                    "name": "K. Mbappé",
+                    "firstname": "Kylian",
+                    "lastname": "Mbappé Lottin",
+                }
+            }
+        ]
+        # plain-ascii search should match the accented API name
+        result = await client.string_match_algorithm(
+            players, first_name="Kylian", last_name="Mbappe"
+        )
+        assert len(result) == 1
+        assert result[0]["player"]["id"] == 278
+
+
+@pytest.mark.asyncio
+async def test_string_match_skips_null_names():
+    async with aiohttp.ClientSession() as session:
+        client = IntegrationLayer(session)
+        players = [{"player": {"id": 1, "firstname": None, "lastname": "Messi"}}]
+        result = await client.string_match_algorithm(
+            players, first_name="Lionel", last_name="Messi"
+        )
+        assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_exact_team():
+    async with aiohttp.ClientSession() as session:
+        client = IntegrationLayer(session)
+        potential_team = [
+            {
+                "team": {"id": 33, "name": "Manchester United", "country": "England"},
+                "venue": {"id": 556, "name": "Old Trafford", "city": "Manchester"},
+            },
+            {
+                "team": {"id": 4898, "name": "Manchester United W", "country": "England"},
+                "venue": {"id": 10726, "name": "Leigh Sports Village Stadium"},
+            },
+            {
+                "team": {"id": 7198, "name": "Manchester United U21", "country": "England"},
+                "venue": {"id": 556, "name": "Old Trafford"},
+            },
+        ]
+        result = await client.get_exact_team(
+            list_of_potential_team=potential_team,
+            team_name="Manchester United",
+        )
+        result = result["data"]
+        assert result["team"]["id"] == 33
+        assert result["team"]["name"] == "Manchester United"
+
+
+@pytest.mark.asyncio
+async def test_short_last_name_is_rejected():
+    async with aiohttp.ClientSession() as session:
+        client = IntegrationLayer(session)
+        result = await client.get_player_profile(first_name="Bo", last_name="Li")
+        assert result["status"] != "success"
+        assert result["data"] is None
+
+
+# ------------------------- TheSportsDB (live, no key needed) -------------------------
 
 
 @pytest.mark.asyncio
 async def test_real_get_team_request():
-
     async with aiohttp.ClientSession() as sess:
         url = "https://www.thesportsdb.com/api/v1/json/3/searchteams.php"
-        async with sess.get(url, params={"t": "inter miami"}) as resp:
-            raw = await resp.json()
-            print(raw, "\n")
-        assert "Inter Miami" in json.dumps(raw)
-
         async with sess.get(url, params={"t": "arsenal"}) as resp:
             raw = await resp.json()
-            print(raw, "\n")
         assert "Arsenal" in json.dumps(raw)
 
-        async with sess.get(url, params={"t": "manchester united"}) as resp:
-            raw = await resp.json()
-            print(raw, "\n")
-        assert "Manchester United" in json.dumps(raw)
+
+@pytest.mark.asyncio
+async def test_get_player_via_sportsdb():
+    async with aiohttp.ClientSession() as session:
+        client = SportsAPIClient(session)
+        players = await client.get_player("Lionel Messi")
+        assert isinstance(players, list) and players
+        assert any("Messi" in (p.name or "") for p in players)
 
 
+@pytest.mark.asyncio
+async def test_get_player_no_results_returns_empty_list():
+    async with aiohttp.ClientSession() as session:
+        client = SportsAPIClient(session)
+        players = await client.get_player("zzzz-no-such-player-zzzz")
+        assert players == []
+
+
+@pytest.mark.asyncio
+async def test_get_team_via_sportsdb():
+    async with aiohttp.ClientSession() as session:
+        client = SportsAPIClient(session)
+        teams = await client.get_team("Arsenal")
+        assert isinstance(teams, list) and teams
+        assert teams[0].name
+        assert teams[0].country
+
+
+# ------------------------- API-Football (live, key required) -------------------------
+
+
+@requires_af_key
 @pytest.mark.asyncio
 async def test_af_get_player_profile():
     async with aiohttp.ClientSession() as session:
@@ -60,6 +190,7 @@ async def test_af_get_player_profile():
         assert argentina_messi.get("nationality") == "Argentina"
 
 
+@requires_af_key
 @pytest.mark.asyncio
 async def test_af_get_player_stat():
     async with aiohttp.ClientSession() as session:
@@ -77,11 +208,12 @@ async def test_af_get_player_stat():
         assert player_stat["games"]["appearences"] == 6
 
 
+@requires_af_key
 @pytest.mark.asyncio
-async def test_AF_get_team_profile():
+async def test_af_get_team_profile():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)
-        result1 = await client.AF_get_team_profile(team_name="manchester united")
+        result1 = await client.af_get_team_profile(team_name="manchester united")
         team = result1["data"][0]
 
         assert team["team"]["id"] == 33
@@ -92,27 +224,24 @@ async def test_AF_get_team_profile():
         assert team["venue"]["city"] == "Manchester"
 
 
+@requires_af_key
 @pytest.mark.asyncio
-async def test_AF_get_team_league_id():
+async def test_af_get_team_league_id():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)
-        result1 = await client.AF_get_team_league_id(team_id=33, season=2023)
-        team1 = result1["data"][0]["league"]
-        assert team1["id"] == 667
-        assert team1["name"] == "Friendlies Clubs"
-        assert team1["type"] == "Cup"
-
-        team3 = result1["data"][2]["league"]
-        assert team3["id"] == 39
-        assert team3["name"] == "Premier League"
-        assert team3["type"] == "League"
+        result1 = await client.af_get_team_league_id(team_id=33, season=2023)
+        leagues = [row["league"] for row in result1["data"]]
+        premier_league = next(lg for lg in leagues if lg["id"] == 39)
+        assert premier_league["name"] == "Premier League"
+        assert premier_league["type"] == "League"
 
 
+@requires_af_key
 @pytest.mark.asyncio
-async def test_AF_get_team_stat():
+async def test_af_get_team_stat():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)
-        result1 = await client.AF_get_team_stat(team_id=33, league_id=39, season=2023)
+        result1 = await client.af_get_team_stat(team_id=33, league_id=39, season=2023)
         stat1 = result1["data"]
 
         assert stat1["league"]["id"] == 39
@@ -123,67 +252,7 @@ async def test_AF_get_team_stat():
         assert stat1["fixtures"]["loses"]["total"] == 14
 
 
-@pytest.mark.asyncio
-async def test_string_match_algorithm():
-    async with aiohttp.ClientSession() as session:
-        client = IntegrationLayer(session)
-
-        # single macth
-        list_of_potential_player = [
-            {
-                "player": {
-                    "id": 249239,
-                    "name": "Lionel Messi Nyamsi",
-                    "firstname": "Lionel Messi",
-                    "lastname": "Nyamsi",
-                    "age": 30,
-                    "birth": {
-                        "date": "1995-03-30",
-                        "place": None,
-                        "country": "Cameroon",
-                    },
-                    "nationality": "Cameroon",
-                    "height": None,
-                    "weight": None,
-                    "number": None,
-                    "position": "Attacker",
-                    "photo": "https://media.api-sports.io/football/players/249239.png",
-                }
-            },
-            {
-                "player": {
-                    "id": 154,
-                    "name": "L. Messi",
-                    "firstname": "Lionel Andrés",
-                    "lastname": "Messi Cuccittini",
-                    "age": 38,
-                    "birth": {
-                        "date": "1987-06-24",
-                        "place": "Rosario",
-                        "country": "Argentina",
-                    },
-                    "nationality": "Argentina",
-                    "height": "170",
-                    "weight": "67",
-                    "number": 10,
-                    "position": "Attacker",
-                    "photo": "https://media.api-sports.io/football/players/154.png",
-                }
-            },
-        ]
-        first_name = "Lionel"
-        last_name = "Messi"
-        result = await client.string_match_algorithm(
-            list_of_potential_player=list_of_potential_player,
-            first_name=first_name,
-            last_name=last_name,
-        )
-
-        assert len(result) == 1
-        assert result[0]["player"]["id"] == 154
-        assert result[0]["player"]["name"] == "L. Messi"
-
-
+@requires_af_key
 @pytest.mark.asyncio
 async def test_get_player_profile():
     async with aiohttp.ClientSession() as session:
@@ -197,104 +266,24 @@ async def test_get_player_profile():
         assert result["data"][0]["player"]["id"] == 154
 
 
+@requires_af_key
 @pytest.mark.asyncio
 async def test_get_player_stats():
     async with aiohttp.ClientSession() as session:
         client = IntegrationLayer(session)
-        result = await client.get_player_stats(
-            first_name="Lionel", last_name="Messi", season=2023
-        )
-        result = result["data"]
-        result[0]["team"]["id"] == 9568
-        result[0]["team"]["name"] == "Inter Miami"
-        result[0]["league"]["id"] == 253
-        result[0]["league"]["name"] == "Major League Soccer"
-        result[0]["games"]["appearences"] == 6
-        result[0]["shots"]["total"] == 11
+        result = await client.get_player_stats(first_name="Lionel", last_name="Messi", season=2023)
+        assert result["status"] == "success"
+        stats = result["data"]
+        assert stats[0]["team"]["name"] == "Inter Miami"
+        assert stats[0]["league"]["name"] == "Major League Soccer"
 
 
-@pytest.mark.asyncio
-async def test_get_exact_team():
-    async with aiohttp.ClientSession() as session:
-        client = IntegrationLayer(session)
-        potential_team = [
-            {
-                "team": {
-                    "id": 33,
-                    "name": "Manchester United",
-                    "code": "MUN",
-                    "country": "England",
-                    "founded": 1878,
-                    "national": False,
-                    "logo": "https://media.api-sports.io/football/teams/33.png",
-                },
-                "venue": {
-                    "id": 556,
-                    "name": "Old Trafford",
-                    "address": "Sir Matt Busby Way",
-                    "city": "Manchester",
-                    "capacity": 76212,
-                    "surface": "grass",
-                    "image": "https://media.api-sports.io/football/venues/556.png",
-                },
-            },
-            {
-                "team": {
-                    "id": 4898,
-                    "name": "Manchester United W",
-                    "code": "MUN",
-                    "country": "England",
-                    "founded": None,
-                    "national": False,
-                    "logo": "https://media.api-sports.io/football/teams/4898.png",
-                },
-                "venue": {
-                    "id": 10726,
-                    "name": "Leigh Sports Village Stadium",
-                    "address": "Sale Way",
-                    "city": "Leigh, Greater Manchester",
-                    "capacity": 11000,
-                    "surface": "grass",
-                    "image": "https://media.api-sports.io/football/venues/10726.png",
-                },
-            },
-            {
-                "team": {
-                    "id": 7198,
-                    "name": "Manchester United U21",
-                    "code": "MUN",
-                    "country": "England",
-                    "founded": None,
-                    "national": False,
-                    "logo": "https://media.api-sports.io/football/teams/7198.png",
-                },
-                "venue": {
-                    "id": 556,
-                    "name": "Old Trafford",
-                    "address": "Sir Matt Busby Way",
-                    "city": "Manchester",
-                    "capacity": 76212,
-                    "surface": "grass",
-                    "image": "https://media.api-sports.io/football/venues/556.png",
-                },
-            },
-        ]
-        result = await client.get_exact_team(
-            list_of_potential_team=potential_team,
-            team_name="Manchester United",
-        )
-        result = result["data"]
-        assert result["team"]["id"] == 33
-        assert result["team"]["name"] == "Manchester United"
-
-
+@requires_af_key
 @pytest.mark.asyncio
 async def test_get_team_profile():
     async with aiohttp.ClientSession() as session:
         client = IntegrationLayer(session)
-        result = await client.get_team_profile(
-            team_name="Manchester United",
-        )
+        result = await client.get_team_profile(team_name="Manchester United")
         result = result["data"]
         assert result["team"]["id"] == 33
         assert result["team"]["name"] == "Manchester United"

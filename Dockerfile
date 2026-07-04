@@ -48,8 +48,5 @@ RUN chown -R appuser:appuser /app && \
 # Switch to the non-privileged user to run the application.
 USER appuser
 
-# Expose the port that the application listens on.
-EXPOSE 8000
-
-# Run the application.
-CMD [ "python3", "src/bot.py" ]
+# Run the application (module form so the src package imports resolve).
+CMD [ "python3", "-m", "src.bot" ]

@@ -121,8 +121,13 @@ This method ensures all dependencies are isolated and correct.
 | `/player <full_name>` | A player's profile card — photo, team, position, nationality, age |
 | `/next_match <team_name>` | A team's upcoming fixtures with kickoff times in your local timezone |
 | `/last_match <team_name>` | A team's most recent result |
+| `/standings <team_name>` | The league table for that team's league (free key shows the top 5) |
 | `/stats <first_name> <last_name> [season]` | Season stats for a player (needs `API_FOOTBALL_KEY`; free plans cover 2021–2023) |
 | `/team_stats <team_name> [season]` | A team's league record for a season (needs `API_FOOTBALL_KEY`) |
+| `/about` | Bot status: uptime, latency, subscription counts |
+
+When a subscribe search matches several players or teams (try "Ronaldo"), the
+bot shows a dropdown so you pick the right one instead of guessing.
 
 ### Notifications
 
@@ -132,9 +137,12 @@ The background poster re-checks your subscriptions every `POLL_INTERVAL` seconds
 - **Final scores** when a followed team's match finishes (green/red/grey embed
   for win/loss/draw)
 - **Kickoff reminders** when a followed team plays within `REMINDER_HOURS`
-  (default 48)
+  (default 48), plus a **kickoff alert** when the match starts
 - **Profile updates** when a followed player/team's info changes (transfer,
   new stadium, ...)
+
+Following a **player** also gets you their club's match notifications — no
+separate team subscription needed.
 
 Everything posted is remembered in the database, so restarts never repost old
 updates.

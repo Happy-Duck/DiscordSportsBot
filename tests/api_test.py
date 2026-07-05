@@ -183,6 +183,23 @@ async def test_get_last_events_via_sportsdb():
 
 
 @pytest.mark.asyncio
+async def test_get_league_table_via_sportsdb():
+    async with aiohttp.ClientSession() as session:
+        client = SportsAPIClient(session)
+        teams = await client.get_team("Real Madrid")
+        assert teams[0].league_id
+        rows = await client.get_league_table(teams[0].league_id, "2025-2026")
+        # the free key caps the table at the top 5 rows
+        assert isinstance(rows, list) and len(rows) >= 5
+        top = rows[0]
+        assert top["rank"] == 1
+        assert top["team"]
+        assert isinstance(top["points"], int)
+        ranks = [r["rank"] for r in rows]
+        assert ranks == sorted(ranks)  # ordered by rank
+
+
+@pytest.mark.asyncio
 async def test_get_next_events_via_sportsdb():
     async with aiohttp.ClientSession() as session:
         client = SportsAPIClient(session)

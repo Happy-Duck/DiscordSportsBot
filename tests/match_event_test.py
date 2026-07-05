@@ -4,15 +4,22 @@
 
 from datetime import datetime, timezone
 
-from src.DataClass import MatchEvent
+from datetime import date
+
+from src.DataClass import MatchEvent, Team
 from src.bot import (
     GREEN,
     GREY,
     RED,
+    _distinct_by_name,
     _event_when,
     _filter_choices,
     _fixture_embed,
+    _kickoff_embed,
+    _previous_season_string,
     _result_embed,
+    _season_string,
+    _standings_lines,
 )
 
 FINISHED_EVENT = {
@@ -109,3 +116,59 @@ def test_filter_choices():
     # capped at 25 for Discord's autocomplete limit
     many = [f"Player {i}" for i in range(40)]
     assert len(_filter_choices(many, "player")) == 25
+
+
+def test_kickoff_embed():
+    e = MatchEvent().from_api_json(UPCOMING_EVENT)
+    embed = _kickoff_embed(e)
+    assert "Kickoff" in embed.title
+    assert "Real Madrid vs Real Sociedad" in embed.title
+
+
+def test_season_strings():
+    # July onward belongs to the season that starts that summer
+    assert _season_string(date(2026, 7, 5)) == "2026-2027"
+    assert _season_string(date(2026, 8, 20)) == "2026-2027"
+    # spring belongs to the season that started the previous summer
+    assert _season_string(date(2026, 3, 1)) == "2025-2026"
+    assert _previous_season_string("2026-2027") == "2025-2026"
+
+
+def test_standings_lines():
+    rows = [
+        {
+            "rank": 1,
+            "team": "Barcelona",
+            "played": 38,
+            "win": 31,
+            "draw": 1,
+            "loss": 6,
+            "goal_diff": 59,
+            "points": 94,
+        },
+        {
+            "rank": 2,
+            "team": "Real Madrid Something Long Name",
+            "played": 38,
+            "win": 30,
+            "draw": 2,
+            "loss": 6,
+            "goal_diff": -3,
+            "points": 92,
+        },
+    ]
+    lines = _standings_lines(rows, highlight="barcelona")
+    assert len(lines) == 3  # header + two rows
+    assert "▸Barcelona" in lines[1]  # highlight marker, case-insensitive
+    assert "+59" in lines[1]
+    assert "-3" in lines[2]
+    assert "Real Madrid Someth" in lines[2]  # name truncated to fit
+
+
+def test_distinct_by_name():
+    a = Team(id="1", name="Arsenal")
+    a2 = Team(id="2", name="Arsenal")
+    b = Team(id="3", name="Arsenal Women")
+    result = _distinct_by_name([a, a2, b])
+    assert list(result.keys()) == ["Arsenal", "Arsenal Women"]
+    assert result["Arsenal"].id == "1"  # first (most relevant) kept

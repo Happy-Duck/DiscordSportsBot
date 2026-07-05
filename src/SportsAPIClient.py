@@ -84,6 +84,44 @@ class SportsAPIClient:
         events = body.get("results") or []
         return [MatchEvent().from_api_json(e) for e in events if e]
 
+    async def get_league_table(self, league_id, season):
+        """League standings for a season ('YYYY-YYYY'). Returns a list of row
+        dicts (possibly empty) or "Server Down" on HTTP errors."""
+        async with self.session.get(
+            f"{SPORTS_DB_URL}/lookuptable.php", params={"l": league_id, "s": season}
+        ) as response:
+            if not 200 <= response.status < 300:
+                return "Server Down"
+            body = await response.json()
+
+        def to_int(val):
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                return None
+
+        rows = []
+        for r in body.get("table") or []:
+            if not r:
+                continue
+            rows.append(
+                {
+                    "rank": to_int(r.get("intRank")),
+                    "team": r.get("strTeam"),
+                    "badge": r.get("strBadge"),
+                    "played": to_int(r.get("intPlayed")),
+                    "win": to_int(r.get("intWin")),
+                    "draw": to_int(r.get("intDraw")),
+                    "loss": to_int(r.get("intLoss")),
+                    "goal_diff": to_int(r.get("intGoalDifference")),
+                    "points": to_int(r.get("intPoints")),
+                    "form": r.get("strForm"),
+                    "league": r.get("strLeague"),
+                    "season": r.get("strSeason"),
+                }
+            )
+        return rows
+
     # ------------------------- API-Football -------------------------
 
     async def _af_get(self, path, params, not_found_status):

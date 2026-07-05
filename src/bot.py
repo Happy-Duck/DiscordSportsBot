@@ -182,6 +182,68 @@ def _filter_choices(names, current):
     return [app_commands.Choice(name=n, value=n) for n in filtered[:25]]
 
 
+def _kickoff_embed(event):
+    """Posted when a followed team's match has just started."""
+    embed = discord.Embed(title=f"Kickoff: {event.home} vs {event.away} is underway!", color=GOLD)
+    details = [d for d in [event.league, f"Round {event.round}" if event.round else None] if d]
+    if details:
+        embed.add_field(name="Competition", value=" • ".join(details), inline=True)
+    if event.venue:
+        embed.add_field(name="Venue", value=event.venue, inline=True)
+    if event.home_badge:
+        embed.set_thumbnail(url=event.home_badge)
+    embed.set_footer(text="via TheSportsDB")
+    return embed
+
+
+def _season_string(today=None):
+    """European season label for a date: July onward belongs to 'YYYY-YYYY+1'."""
+    today = today or datetime.now(timezone.utc).date()
+    if today.month >= 7:
+        return f"{today.year}-{today.year + 1}"
+    return f"{today.year - 1}-{today.year}"
+
+
+def _previous_season_string(season):
+    start = int(season.split("-")[0])
+    return f"{start - 1}-{start}"
+
+
+def _standings_lines(rows, highlight=None):
+    """Monospace league-table lines for a code block. `highlight` marks a team."""
+    lines = [f"{'#':>3} {'Team':<18} {'P':>2} {'W':>2} {'D':>2} {'L':>2} {'GD':>4} {'Pts':>3}"]
+    for r in rows:
+        name = (r.get("team") or "?")[:18]
+        marker = "▸" if highlight and _fold(r.get("team")) == _fold(highlight) else " "
+        gd = r.get("goal_diff")
+        gd_text = "?" if gd is None else (f"+{gd}" if gd > 0 else str(gd))
+        lines.append(
+            f"{r.get('rank') or '?':>2}{marker}{name:<18} "
+            f"{r.get('played') or 0:>2} {r.get('win') or 0:>2} "
+            f"{r.get('draw') or 0:>2} {r.get('loss') or 0:>2} "
+            f"{gd_text:>4} {r.get('points') or 0:>3}"
+        )
+    return lines
+
+
+class PickView(discord.ui.View):
+    """Ephemeral dropdown shown when a search matches several players/teams."""
+
+    def __init__(self, options, on_pick):
+        super().__init__(timeout=60)
+        self.on_pick = on_pick
+        select = discord.ui.Select(placeholder="Which one did you mean?", options=options)
+        select.callback = self._callback
+        self.select = select
+        self.add_item(select)
+
+    async def _callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        message = await self.on_pick(self.select.values[0])
+        await interaction.edit_original_response(content=message, view=None)
+        self.stop()
+
+
 class MyClient(discord.Client):
     user: discord.ClientUser
 
@@ -193,6 +255,7 @@ class MyClient(discord.Client):
         self.http_session: aiohttp.ClientSession | None = None
         self.integration_layer: IntegrationLayer | None = None
         self.sports_api: SportsAPIClient | None = None
+        self.started_at = datetime.now(timezone.utc)
 
     async def setup_hook(self):
         try:
@@ -307,7 +370,7 @@ class MyClient(discord.Client):
                             _event_when(event).isoformat(),
                         )
 
-        # ---- kickoff reminders ----
+        # ---- kickoff reminders + just-started alerts ----
         try:
             next_events = await api.get_next_events(sportsdb_id)
         except Exception as e:
@@ -318,12 +381,19 @@ class MyClient(discord.Client):
             window = now + timedelta(hours=REMINDER_HOURS)
             for event in next_events:
                 when = _event_when(event)
-                if not (event.id and when and now <= when <= window):
+                if not (event.id and when):
                     continue
-                for channel_id in channel_ids:
-                    await self._post_once(
-                        channel_id, "reminder", event.id, "sent", _fixture_embed(event)
-                    )
+                if now <= when <= window:
+                    for channel_id in channel_ids:
+                        await self._post_once(
+                            channel_id, "reminder", event.id, "sent", _fixture_embed(event)
+                        )
+                elif when <= now <= when + timedelta(hours=2):
+                    # the match started within the last two hours
+                    for channel_id in channel_ids:
+                        await self._post_once(
+                            channel_id, "kickoff", event.id, "sent", _kickoff_embed(event)
+                        )
 
     async def post_subscription_updates(self):
         """Polls DB+API every POLL_INTERVAL seconds. Posts to each subscription's
@@ -361,6 +431,9 @@ class MyClient(discord.Client):
                             info["sportsdb_id"] = row["sportsdb_id"]
 
                 # ---- player profile updates ----
+                # players also contribute their club's matches (TheSportsDB
+                # returns the club id with the player, so this costs nothing)
+                derived_teams: dict[str, dict] = {}  # sportsdb team id -> name/channels
                 for name, channel_ids in player_channels.items():
                     try:
                         results = await api.get_player(name)
@@ -373,6 +446,11 @@ class MyClient(discord.Client):
                     snap = repr(_player_snapshot(p))
                     for channel_id in channel_ids:
                         await self._post_once(channel_id, "player", name, snap, _player_embed(p))
+                    if getattr(p, "team_id", None) and getattr(p, "team", None):
+                        derived = derived_teams.setdefault(
+                            str(p.team_id), {"name": p.team, "channels": set()}
+                        )
+                        derived["channels"] |= set(channel_ids)
 
                 # ---- team profile updates + matches ----
                 for name, info in team_info.items():
@@ -398,6 +476,17 @@ class MyClient(discord.Client):
                         await self._post_team_matches(
                             api, name, info["sportsdb_id"], info["channels"]
                         )
+
+                # ---- matches for the clubs of subscribed players ----
+                explicit_ids = {
+                    info["sportsdb_id"] for info in team_info.values() if info["sportsdb_id"]
+                }
+                for sportsdb_id, derived in derived_teams.items():
+                    if sportsdb_id in explicit_ids:
+                        continue  # already handled via a direct team subscription
+                    await self._post_team_matches(
+                        api, derived["name"], sportsdb_id, derived["channels"]
+                    )
 
                 # wait until next interval
                 await asyncio.sleep(POLL_INTERVAL)
@@ -630,6 +719,79 @@ async def last_match(interaction: discord.Interaction, team_name: str):
 
 
 @client.tree.command()
+@app_commands.describe(team_name="Any team in the league you want the table for")
+async def standings(interaction: discord.Interaction, team_name: str):
+    """The league table for a team's league."""
+    await interaction.response.defer(thinking=True)
+    team = await _lookup_team(interaction, team_name)
+    if team is None:
+        return
+    if not getattr(team, "league_id", None):
+        await interaction.followup.send(f"No league found for {team.name}.")
+        return
+
+    season = _season_string()
+    rows = await client.sports_api.get_league_table(team.league_id, season)
+    if rows == "Server Down":
+        await interaction.followup.send("The sports data service is unavailable right now.")
+        return
+    if not rows:
+        # early in the off-season the new table doesn't exist yet
+        season = _previous_season_string(season)
+        rows = await client.sports_api.get_league_table(team.league_id, season)
+    if not rows or rows == "Server Down":
+        await interaction.followup.send(f"No standings available for {team.league}.")
+        return
+
+    league = rows[0].get("league") or team.league
+    table = "\n".join(_standings_lines(rows[:20], highlight=team.name))
+    title = f"{league} — {season}"
+    if len(rows) <= 5:
+        # the free TheSportsDB key caps the table at the top 5
+        title = f"Top of the table: {title}"
+    embed = discord.Embed(title=title, description=f"```\n{table}\n```", color=BLUE)
+    if getattr(team, "badge", None):
+        embed.set_thumbnail(url=team.badge)
+    footer = "P W D L GD Pts • via TheSportsDB"
+    if len(rows) <= 5:
+        footer += " (free key shows top 5)"
+    embed.set_footer(text=footer)
+    await interaction.followup.send(embed=embed)
+
+
+@client.tree.command()
+async def about(interaction: discord.Interaction):
+    """What this bot does and how it's doing."""
+    uptime = datetime.now(timezone.utc) - client.started_at
+    hours, remainder = divmod(int(uptime.total_seconds()), 3600)
+    minutes = remainder // 60
+    try:
+        player_subs = await db_all_player_subscriptions()
+        team_subs = await db_all_team_subscriptions()
+        sub_line = f"{len(player_subs)} player / {len(team_subs)} team subscriptions"
+    except Exception:
+        sub_line = "unavailable"
+
+    embed = discord.Embed(
+        title="SportsBot",
+        description=(
+            "Follow soccer players and teams: match results, kickoff reminders, "
+            "stats, and league standings, posted right here in Discord."
+        ),
+        color=GREEN,
+    )
+    embed.add_field(name="Uptime", value=f"{hours}h {minutes}m", inline=True)
+    embed.add_field(name="Latency", value=f"{client.latency * 1000:.0f} ms", inline=True)
+    embed.add_field(name="Subscriptions", value=sub_line, inline=True)
+    embed.add_field(
+        name="Data",
+        value=f"TheSportsDB + API-Football • checks every {POLL_INTERVAL}s",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+@client.tree.command()
 @app_commands.describe(
     team_name="The team to look up",
     season="Season year, 2021-2023 (free API-Football plans only cover those)",
@@ -686,20 +848,66 @@ async def team_stats(
     await interaction.followup.send(embed=embed)
 
 
+def _distinct_by_name(candidates):
+    """First result per distinct name, preserving API relevance order."""
+    by_name = {}
+    for c in candidates:
+        if getattr(c, "name", None) and c.name not in by_name:
+            by_name[c.name] = c
+    return by_name
+
+
 # subscribe player command
 @client.tree.command()
 @app_commands.describe(full_name="The full name of the player you want to subscribe to")
 async def subscribe_player(interaction: discord.Interaction, full_name: str):
     """Subscribes you to a player; updates post in this channel."""
     await interaction.response.defer(thinking=True, ephemeral=True)
-    success, message = await db_subscribe_player(
-        discord_id=str(interaction.user.id),
-        username=interaction.user.name,
-        player_name=full_name.strip(),
-        channel_id=str(interaction.channel_id),
-        guild_id=str(interaction.guild_id),
-    )
-    await interaction.followup.send(message, ephemeral=True)
+    discord_id = str(interaction.user.id)
+    username = interaction.user.name
+    channel_id = str(interaction.channel_id)
+    guild_id = str(interaction.guild_id)
+
+    async def do_subscribe(name):
+        success, message = await db_subscribe_player(
+            discord_id=discord_id,
+            username=username,
+            player_name=name,
+            channel_id=channel_id,
+            guild_id=guild_id,
+        )
+        return message
+
+    # search first: when several players share the search term, let the
+    # user pick instead of silently subscribing to the first match
+    candidates = []
+    if client.sports_api is not None:
+        try:
+            found = await client.sports_api.get_player(full_name.strip())
+            if isinstance(found, list):
+                candidates = found
+        except Exception as e:
+            print(f"search failed for '{full_name}': {e}")
+
+    by_name = _distinct_by_name(candidates)
+    if len(by_name) > 1:
+        options = [
+            discord.SelectOption(
+                label=name[:100],
+                description=(getattr(c, "team", None) or getattr(c, "position", None) or "")[:100],
+                value=name[:100],
+            )
+            for name, c in list(by_name.items())[:25]
+        ]
+        view = PickView(options, do_subscribe)
+        await interaction.followup.send(
+            f"Found {len(by_name)} players matching '{full_name}':",
+            view=view,
+            ephemeral=True,
+        )
+        return
+
+    await interaction.followup.send(await do_subscribe(full_name.strip()), ephemeral=True)
 
 
 # subscribe team command
@@ -708,14 +916,49 @@ async def subscribe_player(interaction: discord.Interaction, full_name: str):
 async def subscribe_team(interaction: discord.Interaction, full_name: str):
     """Subscribes you to a team; match updates post in this channel."""
     await interaction.response.defer(thinking=True, ephemeral=True)
-    success, message = await db_subscribe_team(
-        discord_id=str(interaction.user.id),
-        username=interaction.user.name,
-        team_name=full_name.strip(),
-        channel_id=str(interaction.channel_id),
-        guild_id=str(interaction.guild_id),
-    )
-    await interaction.followup.send(message, ephemeral=True)
+    discord_id = str(interaction.user.id)
+    username = interaction.user.name
+    channel_id = str(interaction.channel_id)
+    guild_id = str(interaction.guild_id)
+
+    async def do_subscribe(name):
+        success, message = await db_subscribe_team(
+            discord_id=discord_id,
+            username=username,
+            team_name=name,
+            channel_id=channel_id,
+            guild_id=guild_id,
+        )
+        return message
+
+    candidates = []
+    if client.sports_api is not None:
+        try:
+            found = await client.sports_api.get_team(full_name.strip())
+            if isinstance(found, list):
+                candidates = found
+        except Exception as e:
+            print(f"search failed for '{full_name}': {e}")
+
+    by_name = _distinct_by_name(candidates)
+    if len(by_name) > 1:
+        options = [
+            discord.SelectOption(
+                label=name[:100],
+                description=(getattr(c, "league", None) or getattr(c, "country", None) or "")[:100],
+                value=name[:100],
+            )
+            for name, c in list(by_name.items())[:25]
+        ]
+        view = PickView(options, do_subscribe)
+        await interaction.followup.send(
+            f"Found {len(by_name)} teams matching '{full_name}':",
+            view=view,
+            ephemeral=True,
+        )
+        return
+
+    await interaction.followup.send(await do_subscribe(full_name.strip()), ephemeral=True)
 
 
 # unsubscribe player command

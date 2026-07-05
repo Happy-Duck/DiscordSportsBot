@@ -68,6 +68,7 @@ class Team:
         stadium=None,
         founded=None,
         badge=None,
+        league_id=None,
     ):
         self.id = id
         self.name = name
@@ -77,6 +78,7 @@ class Team:
         self.stadium = stadium
         self.founded = founded
         self.badge = badge
+        self.league_id = league_id
 
     def from_api_json(self, data: dict):
         """Populate fields from a TheSportsDB team object (or a generic dict)."""
@@ -92,6 +94,7 @@ class Team:
         self.stadium = data.get("strStadium") or data.get("stadium") or self.stadium
         self.founded = data.get("intFormedYear") or data.get("founded") or self.founded
         self.badge = data.get("strBadge") or data.get("badge") or self.badge
+        self.league_id = data.get("idLeague") or data.get("league_id") or self.league_id
 
         return self
 

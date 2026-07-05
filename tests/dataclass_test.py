@@ -126,6 +126,7 @@ def test_team_from_api_json():
     assert example_team.league == "English Premier League"
     assert example_team.stadium == "Emirates Stadium"
     assert example_team.founded == "1892"
+    assert example_team.league_id == "4328"  # needed for /standings
 
 
 def test_team_from_api_json_handles_missing_fields():

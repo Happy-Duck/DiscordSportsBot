@@ -29,85 +29,107 @@ The application is built using specific layers to ensure modularity and maintain
 4.  **Deployment:**
     -   The application is containerized using **Docker** to ensure a reproducible environment (`Dockerfile`, `compose.yaml`).
 
-## Installation Instructions
+## Setup
 
-### Prerequisites
--   **Git**
--   **Docker** (Recommended for easiest run)
--   **Python 3.10+** (If running locally without Docker)
--   A **Discord Bot Token** (Get one from the [Discord Developer Portal](https://discord.com/developers/applications))
--   An **API-Football Key** (Optional, for advanced stats)
+You need three things: a Discord bot identity (free, ~5 minutes), this code, and
+a way to run it (Docker **or** Python 3.10+). Follow the steps in order.
 
-### Method 1: Running with Docker (Recommended)
-This method ensures all dependencies are isolated and correct.
+### Step 1 — Create your Discord bot (one time)
 
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/CS222-UIUC/fa25-team86-discordsportsbot.git
-    cd fa25-team86-discordsportsbot
-    ```
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+   and click **New Application**. Name it anything (e.g. "SportsBot").
+2. In the left sidebar open **Bot**, click **Reset Token**, and copy the token
+   somewhere safe. This is your `DISCORD_TOKEN`. Treat it like a password —
+   anyone who has it controls your bot.
+3. Still on the **Bot** page, under **Privileged Gateway Intents**, enable
+   **Message Content Intent** and save. *The bot refuses to start without this.*
+4. Invite the bot to your server: open **OAuth2 → URL Generator**, check the
+   scopes **`bot`** and **`applications.commands`**, then under Bot Permissions
+   check **View Channels**, **Send Messages**, **Embed Links**, and
+   **Read Message History**. Open the generated URL in your browser and pick
+   your server.
 
-2.  **Configure Environment Variables**
-    - Copy the template file:
-      ```bash
-      cp RenameTo.env .env
-      ```
-    - Open `.env` and add your keys:
-      ```env
-      DISCORD_TOKEN=your_discord_bot_token_here
-      API_FOOTBALL_KEY=your_api_key_here   # optional, needed only for /stats
-      DEV_GUILD_ID=your_server_id_here     # optional, makes slash commands appear instantly
-      POLL_INTERVAL=300                    # optional, seconds between subscription checks
-      ```
-    - In the [Discord Developer Portal](https://discord.com/developers/applications), enable the
-      **Message Content Intent** for your bot (Bot → Privileged Gateway Intents).
+### Step 2 — Gather your config values
 
-3.  **Build and Run**
-    ```bash
-    docker compose up --build
-    ```
-    The bot should now be online in your Discord server.
+| Value | Required? | Where to get it |
+|-------|-----------|-----------------|
+| `DISCORD_TOKEN` | **Yes** | Step 1.2 above |
+| `DEV_GUILD_ID` | Recommended | In Discord: User Settings → Advanced → enable **Developer Mode**, then right-click your server's name → **Copy Server ID**. With this set, slash commands appear in that server instantly; without it they sync globally, which can take up to an hour. |
+| `API_FOOTBALL_KEY` | No | Free key from [api-football.com](https://www.api-football.com/). Only needed for `/stats` and `/team_stats`; everything else works without it. |
 
-### Method 2: Running Locally (Python)
+### Step 3 — Get the code and configure it
 
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/CS222-UIUC/fa25-team86-discordsportsbot.git
-    cd fa25-team86-discordsportsbot
-    ```
+```bash
+git clone https://github.com/Happy-Duck/DiscordSportsBot.git
+cd DiscordSportsBot
+cp RenameTo.env .env        # copy it — don't rename it
+```
 
-2.  **Set Up Virtual Environment**
-    -   **macOS/Linux**:
-        ```bash
-        python -m venv .venv
-        source .venv/bin/activate
-        ```
-    -   **Windows**:
-        ```powershell
-        python -m venv .venv
-        .\.venv\Scripts\Activate.ps1
-        ```
+Open `.env` in any editor and fill in the values from Step 2:
 
-3.  **Install Dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
+```env
+DISCORD_TOKEN=paste_your_token_here
+DEV_GUILD_ID=paste_your_server_id_here
+API_FOOTBALL_KEY=            # fine to leave empty
+POLL_INTERVAL=300
+REMINDER_HOURS=48
+```
 
-4.  **Initialize Database** (optional — the bot also does this on startup)
-    ```bash
-    python -m src.setup_database
-    ```
-    This creates the local `src/sportsbot.db`.
+### Step 4 — Run it
 
-5.  **Configure Environment Variables**
-    -   Create a `.env` file (copy `RenameTo.env`) and add your `DISCORD_TOKEN`.
-    -   Optionally set `API_FOOTBALL_KEY` (for `/stats`), `DEV_GUILD_ID` (instant
-        slash-command sync while developing), and `POLL_INTERVAL`.
+**Option A: Docker (no Python needed)**
 
-6.  **Run the Bot** (from the project root, using the module form)
-    ```bash
-    python -m src.bot
-    ```
+```bash
+docker compose up --build
+```
+
+**Option B: Python 3.10+**
+
+macOS/Linux:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m src.bot
+```
+
+Windows (PowerShell — use `py` if `python` isn't found):
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m src.bot
+```
+
+Always run `python -m src.bot` **from the project root** (the folder containing
+`src/`), not from inside `src/`. The SQLite database (`src/sportsbot.db`) is
+created automatically on first startup — no separate setup step needed.
+
+### Step 5 — Check that it worked
+
+The console should print, in order:
+
+```
+initialized the database
+commands synced to dev guild <your id>
+We have successfully logged in as <YourBot>#1234
+```
+
+Then in Discord: the bot shows as **Online**; type `/about` and it should reply
+with its status. If commands don't appear, see Troubleshooting below.
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---------|-------------|
+| `RuntimeError: DISCORD_TOKEN not found` | No `.env` file next to `README.md`, or the token line is empty. Copy `RenameTo.env` to `.env` and paste your token. |
+| `PrivilegedIntentsRequired` on startup | Message Content Intent isn't enabled — Step 1.3. |
+| `LoginFailure: Improper token` | The token was copied wrong or reset since. Reset it in the Developer Portal and paste the new one. |
+| Slash commands don't show up in Discord | Set `DEV_GUILD_ID` to your server's ID (Step 2) and restart — global sync without it can take up to an hour. Also confirm the invite used the `applications.commands` scope (Step 1.4). |
+| `ModuleNotFoundError: No module named 'src'` | You ran the bot from inside `src/`. Run `python -m src.bot` from the project root. |
+| `Python was not found` (Windows) | Install Python from [python.org](https://www.python.org/downloads/) or the `winget install Python.Python.3.12` command, then reopen the terminal. Try `py` instead of `python`. |
+| Bot is online but never posts updates | Subscribe to something first (`/subscribe_team`), then wait one poll cycle (`POLL_INTERVAL`, default 5 minutes). Updates only post when something new happens — no repeat spam. |
+| `/stats` or `/team_stats` says API-Football is not configured | Those two commands need `API_FOOTBALL_KEY` in `.env` (Step 2). |
 
 ## Bot Commands
 
@@ -149,12 +171,15 @@ updates.
 
 ## Running Tests
 
+With the virtual environment from Step 4 active, run from the project root:
+
 ```bash
 pytest tests/
 ```
 
 Offline and TheSportsDB tests always run; API-Football tests are skipped unless
-`API_FOOTBALL_KEY` is set in your environment.
+`API_FOOTBALL_KEY` is set in your environment. Tests use a throwaway database —
+they never touch your real subscriptions.
 
 ## Group Members
 

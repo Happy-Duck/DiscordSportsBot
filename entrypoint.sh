@@ -1,11 +1,9 @@
 #!/bin/sh
 set -e
 
-# If a volume is mounted at /data (Fly.io persistent storage for the SQLite
-# DB), its root directory is owned by root until we fix it here -- do that
-# once as root, then drop down to the unprivileged appuser for the app itself.
-if [ -d /data ]; then
-  chown -R appuser:appuser /data
-fi
+# compose.yaml bind-mounts the host's ./src into /app/src, which brings in
+# the host's ownership (not the container's appuser) -- fix it here as root,
+# then drop down to the unprivileged appuser for the app itself.
+chown -R appuser:appuser /app/src
 
 exec gosu appuser "$@"

@@ -14,15 +14,19 @@ from sqlalchemy import (  # pyright: ignore
     Date,
     UniqueConstraint,
 )
+from sqlalchemy.pool import NullPool  # pyright: ignore
 import os
 
-# Use SQLite for local testing, the same DB the bot will connect to
+# Use SQLite for local testing, the same DB the bot will connect to.
+# SPORTSBOT_DB can override the location (used by tests / deployments).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # src/
-DATABASE_PATH = os.path.join(BASE_DIR, "sportsbot.db")
+DATABASE_PATH = os.getenv("SPORTSBOT_DB", os.path.join(BASE_DIR, "sportsbot.db"))
 DATABASE_URL = f"sqlite+aiosqlite:///{DATABASE_PATH}"
 
-# Create the async engine and session factory
-engine = create_async_engine(DATABASE_URL, echo=False, future=True)
+# Create the async engine and session factory.
+# NullPool: aiosqlite connections must not be reused across event loops
+# (pytest creates a fresh loop per test), and opening SQLite connections is cheap.
+engine = create_async_engine(DATABASE_URL, echo=False, future=True, poolclass=NullPool)
 SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 # Base class for SQLAlchemy
@@ -31,9 +35,28 @@ SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=F
 Base = declarative_base()
 
 
+# Columns added after the original schema shipped: existing databases need an
+# ALTER TABLE because create_all only creates missing tables, not columns.
+_MIGRATIONS = [
+    ("teams", "sportsdb_id", "VARCHAR(20)"),
+]
+
+
+def _apply_migrations(conn):
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(conn)
+    for table, column, ddl_type in _MIGRATIONS:
+        if table in inspector.get_table_names():
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            if column not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+
+
 # call this function in setup_database to create sportsbot.DB
 async def init_db():
     async with engine.begin() as conn:
+        await conn.run_sync(_apply_migrations)
         await conn.run_sync(Base.metadata.create_all)
 
 
@@ -48,6 +71,7 @@ class Team(Base):
     country = Column(
         String(50)
     )  # League and Country being here is quite expansive; could be removed.
+    sportsdb_id = Column(String(20))  # TheSportsDB idTeam, needed for fixture/result lookups
     players = relationship("Player", back_populates="team")  # One to Many
     home_matches = relationship(
         "Match", foreign_keys="Match.home_team_id", back_populates="home_team"
@@ -93,12 +117,8 @@ class Match(Base):
     date = Column(Date)
     home_score = Column(Integer)
     away_score = Column(Integer)
-    home_team = relationship(
-        "Team", foreign_keys=[home_team_id], back_populates="home_matches"
-    )
-    away_team = relationship(
-        "Team", foreign_keys=[away_team_id], back_populates="away_matches"
-    )
+    home_team = relationship("Team", foreign_keys=[home_team_id], back_populates="home_matches")
+    away_team = relationship("Team", foreign_keys=[away_team_id], back_populates="away_matches")
     stats = relationship(
         "PlayerStat", back_populates="match"
     )  # leads to every PlayerStat object with this MatchID (One to Many)
@@ -142,9 +162,7 @@ class LifetimeStat(Base):
 
 class Member(Base):
     __tablename__ = "members"
-    id = Column(
-        Integer, primary_key=True
-    )  # Internal PK. Could be mapped to discord_id if desired.
+    id = Column(Integer, primary_key=True)  # Internal PK. Could be mapped to discord_id if desired.
     discord_id = Column(String(50), unique=True, nullable=False)  # discord key
     username = Column(String(100))
     timezone = Column(String(50))  # transforms on the date-time for matches
@@ -170,6 +188,19 @@ class PlayerSubscription(Base):
     __table_args__ = (
         UniqueConstraint("member_id", "player_id", name="_member_player_uc"),
     )  # no duplicate subs
+
+
+class PostedUpdate(Base):
+    """Remembers what the background poster already posted to each channel so
+    restarts don't repost and finished matches are announced exactly once."""
+
+    __tablename__ = "posted_updates"
+    id = Column(Integer, primary_key=True)
+    channel_id = Column(String(50), nullable=False)
+    kind = Column(String(20), nullable=False)  # "player" / "team" / "result" / "reminder"
+    key = Column(String(120), nullable=False)  # entity name or event id
+    fingerprint = Column(String(200))  # hash/summary of what was posted
+    __table_args__ = (UniqueConstraint("channel_id", "kind", "key", name="_channel_kind_key_uc"),)
 
 
 class TeamSubscription(Base):

@@ -28,6 +28,7 @@ RUN apt-get update && \
       libffi-dev \
       libssl-dev \
       ca-certificates \
+      gosu \
       && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -45,11 +46,12 @@ COPY . .
 RUN chown -R appuser:appuser /app && \
     chmod -R u+w /app/src
 
-# Switch to the non-privileged user to run the application.
-USER appuser
+# Stays root so the entrypoint can chown a freshly-mounted volume (e.g. Fly.io's
+# /data) before dropping to appuser -- a mounted volume's root directory is
+# owned by root regardless of what the image sets up at build time.
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT [ "/entrypoint.sh" ]
 
-# Expose the port that the application listens on.
-EXPOSE 8000
-
-# Run the application.
-CMD [ "python3", "src/bot.py" ]
+# Run the application (module form so the src package imports resolve).
+CMD [ "python3", "-m", "src.bot" ]

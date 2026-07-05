@@ -1,24 +1,26 @@
 # database_tests.py
+# Dev inspection script: run directly to dump the bot DB's tables and sample rows.
+# Usage (from the project root): python tests/database_tests.py
 
 import asyncio
+import sys
+from pathlib import Path
+
 from sqlalchemy.ext.asyncio import create_async_engine  # pyright: ignore
 from sqlalchemy import text  # pyright: ignore
 
-# This is where we can unit test our code with absolute basic print statements; set this up for now
-# to reflect that the SportsBot:  (1) Contains the tables we require
-# and (2) the DBMS is organized as expected
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-# As we continue to work on the project, this is how
+from src.db_skeleton import DATABASE_URL  # noqa: E402
 
-DB_PATH = "sqlite+aiosqlite:////app/src/sportsbot.db"
+DB_PATH = DATABASE_URL
 
 
 async def list_tables():
     engine = create_async_engine(DB_PATH)  # added absolute pathing
     async with engine.connect() as conn:
-        result = await conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table';")
-        )
+        result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table';"))
         tables = [row[0] for row in result]
         print(tables)
 
@@ -26,9 +28,7 @@ async def list_tables():
 async def list_table_columns():
     engine = create_async_engine(DB_PATH)
     async with engine.connect() as conn:
-        result = await conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table';")
-        )
+        result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table';"))
         tables = [row[0] for row in result]
 
         if not tables:
@@ -89,8 +89,10 @@ async def show_first_five_team_subs():
                 print(dict(row))
     await engine.dispose()
 
-asyncio.run(list_tables())
-asyncio.run(list_table_columns())
-asyncio.run(show_first_five_members())
-asyncio.run(show_first_five_player_subs())
-asyncio.run(show_first_five_team_subs())
+
+if __name__ == "__main__":
+    asyncio.run(list_tables())
+    asyncio.run(list_table_columns())
+    asyncio.run(show_first_five_members())
+    asyncio.run(show_first_five_player_subs())
+    asyncio.run(show_first_five_team_subs())

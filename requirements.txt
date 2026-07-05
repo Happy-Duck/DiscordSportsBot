@@ -1,21 +1,17 @@
-#Dependencies (All latest versions - Rishi)
-discord.py==2.6.4
-python-dotenv==1.0.0
-aiohttp==3.8.4
-SQLAlchemy==2.0.20
-aiosqlite==0.17.0
-mysql-connector-python==9.4.0 #probably need this for SQLAlchemy, putting this here just in case
+# Runtime dependencies
+discord.py>=2.4,<3.0
+python-dotenv>=1.0
+aiohttp>=3.9.5,<4.0
+SQLAlchemy>=2.0.30,<2.1
+aiosqlite>=0.20
 
-#Testing (I just put whatever I found relevant and whats on the doc - Rishi)
-pytest==7.4.0
-coverage==7.3.1
-pytest-cov==4.1.0
-flake8==6.1.0
-black==23.7.0
-aiohttp==3.8.4
-aioresponses==0.7.2
-pep8-naming==0.13.3
-pytest-asyncio==0.21.0
-pytest-mock==3.10.0
-
-#Using Python 3.13 (not sure if there is a better place to put this - Rishi)
+# Testing / tooling
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-cov>=5.0
+pytest-mock>=3.12
+coverage>=7.4
+aioresponses>=0.7.6
+flake8>=7.0
+black>=24.0
+pep8-naming>=0.13

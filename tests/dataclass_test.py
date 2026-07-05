@@ -18,8 +18,8 @@ from src.DataClass import Team
 
 def test_player_from_api_json():
     example_player = Player()
-    assert example_player.name == ""
-    assert example_player.id == ""
+    assert example_player.name is None
+    assert example_player.id is None
 
     example_data_1 = {
         "idPlayer": "34146370",
@@ -67,8 +67,8 @@ def test_player_from_api_json():
 
 def test_team_from_api_json():
     example_team = Team()
-    assert example_team.name == ""
-    assert example_team.id == ""
+    assert example_team.name is None
+    assert example_team.id is None
 
     example_data_1 = {
         "idTeam": "133604",
@@ -123,3 +123,25 @@ def test_team_from_api_json():
     assert example_team.id == "133604"
     assert example_team.name == "Arsenal"
     assert example_team.country == "England"
+    assert example_team.league == "English Premier League"
+    assert example_team.stadium == "Emirates Stadium"
+    assert example_team.founded == "1892"
+    assert example_team.league_id == "4328"  # needed for /standings
+
+
+def test_team_from_api_json_handles_missing_fields():
+    # Regression test: a team object with no league/country/stadium keys
+    # used to crash with AttributeError (self.league_id was never defined).
+    team = Team()
+    team.from_api_json({"idTeam": "1", "strTeam": "Tiny FC"})
+    assert team.id == "1"
+    assert team.name == "Tiny FC"
+    assert team.league is None
+    assert team.country is None
+
+
+def test_player_age_computed_from_date_born():
+    player = Player()
+    player.from_api_json({"idPlayer": "2", "strPlayer": "Young Talent", "dateBorn": "2000-01-15"})
+    assert isinstance(player.age, int)
+    assert player.age >= 26  # born in 2000, so at least 26 by 2026

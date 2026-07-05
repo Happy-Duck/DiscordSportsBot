@@ -35,9 +35,28 @@ SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=F
 Base = declarative_base()
 
 
+# Columns added after the original schema shipped: existing databases need an
+# ALTER TABLE because create_all only creates missing tables, not columns.
+_MIGRATIONS = [
+    ("teams", "sportsdb_id", "VARCHAR(20)"),
+]
+
+
+def _apply_migrations(conn):
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(conn)
+    for table, column, ddl_type in _MIGRATIONS:
+        if table in inspector.get_table_names():
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            if column not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+
+
 # call this function in setup_database to create sportsbot.DB
 async def init_db():
     async with engine.begin() as conn:
+        await conn.run_sync(_apply_migrations)
         await conn.run_sync(Base.metadata.create_all)
 
 
@@ -52,6 +71,7 @@ class Team(Base):
     country = Column(
         String(50)
     )  # League and Country being here is quite expansive; could be removed.
+    sportsdb_id = Column(String(20))  # TheSportsDB idTeam, needed for fixture/result lookups
     players = relationship("Player", back_populates="team")  # One to Many
     home_matches = relationship(
         "Match", foreign_keys="Match.home_team_id", back_populates="home_team"
@@ -168,6 +188,19 @@ class PlayerSubscription(Base):
     __table_args__ = (
         UniqueConstraint("member_id", "player_id", name="_member_player_uc"),
     )  # no duplicate subs
+
+
+class PostedUpdate(Base):
+    """Remembers what the background poster already posted to each channel so
+    restarts don't repost and finished matches are announced exactly once."""
+
+    __tablename__ = "posted_updates"
+    id = Column(Integer, primary_key=True)
+    channel_id = Column(String(50), nullable=False)
+    kind = Column(String(20), nullable=False)  # "player" / "team" / "result" / "reminder"
+    key = Column(String(120), nullable=False)  # entity name or event id
+    fingerprint = Column(String(200))  # hash/summary of what was posted
+    __table_args__ = (UniqueConstraint("channel_id", "kind", "key", name="_channel_kind_key_uc"),)
 
 
 class TeamSubscription(Base):

@@ -2,7 +2,7 @@
 
 import os
 from dotenv import load_dotenv
-from .DataClass import Player, Team
+from .DataClass import MatchEvent, Player, Team
 
 load_dotenv()
 
@@ -57,6 +57,32 @@ class SportsAPIClient:
 
         team_list = response_object.get("teams") or []
         return [Team().from_api_json(t) for t in team_list if t]
+
+    async def get_next_events(self, team_id):
+        """Upcoming fixtures for a TheSportsDB team id. Returns a list of
+        MatchEvent (possibly empty) or "Server Down" on HTTP errors."""
+        async with self.session.get(
+            f"{SPORTS_DB_URL}/eventsnext.php", params={"id": team_id}
+        ) as response:
+            if not 200 <= response.status < 300:
+                return "Server Down"
+            body = await response.json()
+
+        events = body.get("events") or []
+        return [MatchEvent().from_api_json(e) for e in events if e]
+
+    async def get_last_events(self, team_id):
+        """Most recent results for a TheSportsDB team id. Returns a list of
+        MatchEvent (possibly empty) or "Server Down" on HTTP errors."""
+        async with self.session.get(
+            f"{SPORTS_DB_URL}/eventslast.php", params={"id": team_id}
+        ) as response:
+            if not 200 <= response.status < 300:
+                return "Server Down"
+            body = await response.json()
+
+        events = body.get("results") or []
+        return [MatchEvent().from_api_json(e) for e in events if e]
 
     # ------------------------- API-Football -------------------------
 

@@ -10,6 +10,7 @@ from .db_skeleton import (
     Member,
     Player,
     PlayerSubscription,
+    PostedUpdate,
     Team,
     TeamSubscription,
     init_db,
@@ -187,10 +188,12 @@ async def db_subscribe_team(
         if matching_teams:
             team = matching_teams[0]
         else:
+            api_id = getattr(api_t, "id", None)
             team = Team(
                 name=canonical_name,
                 league=getattr(api_t, "league", None),
                 country=getattr(api_t, "country", None),
+                sportsdb_id=(str(api_id) if api_id else None),
             )
             session.add(team)
             await session.commit()
@@ -378,6 +381,7 @@ async def db_all_team_subscriptions():
                 Member.discord_id,
                 Member.username,
                 Team.name.label("team_name"),
+                Team.sportsdb_id,
                 TeamSubscription.channel_id,
                 TeamSubscription.guild_id,
             )
@@ -389,8 +393,58 @@ async def db_all_team_subscriptions():
                 "discord_id": r.discord_id,
                 "username": r.username,
                 "team_name": r.team_name,
+                "sportsdb_id": r.sportsdb_id,
                 "channel_id": r.channel_id,
                 "guild_id": r.guild_id,
             }
             for r in result.all()
         ]
+
+
+async def db_set_team_sportsdb_id(team_name: str, sportsdb_id: str):
+    """Backfill the TheSportsDB id on team rows created before that column existed."""
+    async with SessionLocal() as session:
+        result = await session.execute(select(Team).where(_name_matches(Team.name, team_name)))
+        for team in result.scalars().all():
+            if not team.sportsdb_id:
+                team.sportsdb_id = str(sportsdb_id)
+        await session.commit()
+
+
+async def db_get_posted_fingerprint(channel_id: str, kind: str, key: str):
+    """What the poster last posted for this (channel, kind, key), or None."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(PostedUpdate.fingerprint).where(
+                PostedUpdate.channel_id == str(channel_id),
+                PostedUpdate.kind == kind,
+                PostedUpdate.key == str(key),
+            )
+        )
+        row = result.first()
+        return row[0] if row else None
+
+
+async def db_set_posted_fingerprint(channel_id: str, kind: str, key: str, fingerprint: str):
+    """Record that the poster posted `fingerprint` for this (channel, kind, key)."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(PostedUpdate).where(
+                PostedUpdate.channel_id == str(channel_id),
+                PostedUpdate.kind == kind,
+                PostedUpdate.key == str(key),
+            )
+        )
+        row = result.scalars().first()
+        if row:
+            row.fingerprint = fingerprint
+        else:
+            session.add(
+                PostedUpdate(
+                    channel_id=str(channel_id),
+                    kind=kind,
+                    key=str(key),
+                    fingerprint=fingerprint,
+                )
+            )
+        await session.commit()

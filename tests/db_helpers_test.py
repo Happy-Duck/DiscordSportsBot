@@ -41,6 +41,7 @@ class FakeSportsAPIClient:
                     name="Arsenal",
                     league="English Premier League",
                     country="England",
+                    badge="https://example.com/arsenal.png",
                 )
             ]
         return []
@@ -224,6 +225,56 @@ async def test_search_resolving_to_existing_canonical_name_does_not_duplicate():
             )
         ).scalar_one()
     assert count == 1  # one canonical row, not a duplicate per spelling
+
+
+@pytest.mark.asyncio
+async def test_team_subscription_stores_sportsdb_id():
+    # the poller needs TheSportsDB's team id to fetch fixtures/results
+    ok, _ = await db_helpers.db_subscribe_team(
+        "sid-user", "tester", "Arsenal", channel_id="1", guild_id="2"
+    )
+    assert ok
+    rows = await db_helpers.db_all_team_subscriptions()
+    mine = [r for r in rows if r["discord_id"] == "sid-user"]
+    assert mine and mine[0]["sportsdb_id"] == "133604"
+
+
+@pytest.mark.asyncio
+async def test_sportsdb_id_backfill():
+    # rows created before the column existed have sportsdb_id=None;
+    # the poller backfills them after resolving the id via the API
+    async with SessionLocal() as session:
+        session.add(TeamRow(name="Old Team", sportsdb_id=None))
+        await session.commit()
+
+    await db_helpers.db_set_team_sportsdb_id("old team", "424242")
+
+    async with SessionLocal() as session:
+        from sqlalchemy import select
+
+        row = (
+            (await session.execute(select(TeamRow).where(TeamRow.name == "Old Team")))
+            .scalars()
+            .first()
+        )
+        assert row.sportsdb_id == "424242"
+
+
+@pytest.mark.asyncio
+async def test_posted_fingerprints_roundtrip():
+    # nothing posted yet
+    assert await db_helpers.db_get_posted_fingerprint("42", "result", "ev1") is None
+
+    await db_helpers.db_set_posted_fingerprint("42", "result", "ev1", "4-2")
+    assert await db_helpers.db_get_posted_fingerprint("42", "result", "ev1") == "4-2"
+
+    # upsert overwrites
+    await db_helpers.db_set_posted_fingerprint("42", "result", "ev1", "4-3")
+    assert await db_helpers.db_get_posted_fingerprint("42", "result", "ev1") == "4-3"
+
+    # keys are scoped per channel and kind
+    assert await db_helpers.db_get_posted_fingerprint("99", "result", "ev1") is None
+    assert await db_helpers.db_get_posted_fingerprint("42", "reminder", "ev1") is None
 
 
 @pytest.mark.asyncio

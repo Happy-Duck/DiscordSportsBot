@@ -114,15 +114,30 @@ This method ensures all dependencies are isolated and correct.
 | Command | Description |
 |---------|-------------|
 | `/subscribe_player <full_name>` | Follow a player; updates post in the channel you ran the command in |
-| `/subscribe_team <full_name>` | Follow a team; updates post in the channel you ran the command in |
-| `/unsubscribe_player <full_name>` | Stop following a player |
-| `/unsubscribe_team <full_name>` | Stop following a team |
-| `/subscriptions` | List everything you follow |
-| `/stats <first_name> <last_name> [season]` | Season stats for a player (needs `API_FOOTBALL_KEY`; free plans cover seasons 2021–2023) |
+| `/subscribe_team <full_name>` | Follow a team; match results and kickoff reminders post in that channel |
+| `/unsubscribe_player <full_name>` | Stop following a player (autocompletes from your subscriptions) |
+| `/unsubscribe_team <full_name>` | Stop following a team (autocompletes from your subscriptions) |
+| `/subscriptions` | List everything you follow (only you see the reply) |
+| `/player <full_name>` | A player's profile card — photo, team, position, nationality, age |
+| `/next_match <team_name>` | A team's upcoming fixtures with kickoff times in your local timezone |
+| `/last_match <team_name>` | A team's most recent result |
+| `/stats <first_name> <last_name> [season]` | Season stats for a player (needs `API_FOOTBALL_KEY`; free plans cover 2021–2023) |
+| `/team_stats <team_name> [season]` | A team's league record for a season (needs `API_FOOTBALL_KEY`) |
+
+### Notifications
 
 The background poster re-checks your subscriptions every `POLL_INTERVAL` seconds
-(default 300) and posts an embed to the subscribing channel whenever the tracked
-player/team data changes.
+(default 300) and posts to each subscription's channel:
+
+- **Final scores** when a followed team's match finishes (green/red/grey embed
+  for win/loss/draw)
+- **Kickoff reminders** when a followed team plays within `REMINDER_HOURS`
+  (default 48)
+- **Profile updates** when a followed player/team's info changes (transfer,
+  new stadium, ...)
+
+Everything posted is remembered in the database, so restarts never repost old
+updates.
 
 ## Running Tests
 

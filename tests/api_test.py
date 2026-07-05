@@ -166,6 +166,34 @@ async def test_get_team_via_sportsdb():
         assert isinstance(teams, list) and teams
         assert teams[0].name
         assert teams[0].country
+        assert teams[0].id  # needed for fixture/result lookups
+        assert teams[0].badge  # used as embed thumbnail
+
+
+@pytest.mark.asyncio
+async def test_get_last_events_via_sportsdb():
+    async with aiohttp.ClientSession() as session:
+        client = SportsAPIClient(session)
+        teams = await client.get_team("Real Madrid")
+        events = await client.get_last_events(teams[0].id)
+        assert isinstance(events, list) and events
+        e = events[0]
+        assert e.id and e.home and e.away
+        assert e.finished  # last events should have final scores
+
+
+@pytest.mark.asyncio
+async def test_get_next_events_via_sportsdb():
+    async with aiohttp.ClientSession() as session:
+        client = SportsAPIClient(session)
+        teams = await client.get_team("Real Madrid")
+        events = await client.get_next_events(teams[0].id)
+        # upcoming fixtures can legitimately be empty deep in the off-season;
+        # when present they must parse into named, unfinished events
+        assert isinstance(events, list)
+        for e in events:
+            assert e.id and e.home and e.away
+            assert not e.finished
 
 
 # ------------------------- API-Football (live, key required) -------------------------
